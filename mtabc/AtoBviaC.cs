@@ -37,17 +37,12 @@ namespace mt.distances
             _routingpointxml = _getRoutingPoints();
         }
 
+        /* date created 20161215 */
+        /* last modified 20161215 */
+        /* No need to hardcode the api_key value in here. */
         public void setApiKey(String apikey)
         {
             _apikey = apikey;
-        }
-
-
-        /* date created 20161205 
-         * last modified 20161205 */
-        public void testme() 
-        {
-            System.Windows.Forms.MessageBox.Show("Hello and welcome to AtoBviaC!");
         }
 
         /* date created 20161205 
@@ -105,7 +100,7 @@ namespace mt.distances
         /* date created 20161205
          * last modified 20161206
          * works 
-         * TODO - expand to handle partial routing points.
+         * TODO - expand to handle partial routing points?
          */
         public String transformToUrl(String method, String ports, String openports, String closeports)
         {
@@ -168,7 +163,7 @@ namespace mt.distances
 
         /* date created 20161205 
          * last modified 20161205
-         * proven to work - direct call to return a string containing total distance */
+         * proven to work - direct call to return a simple string containing total distance in voyage */
         public String getDistance(String voyagestring)
         {
 
@@ -193,9 +188,50 @@ namespace mt.distances
 
 
         /* 
+        * date created 20161219
+        * last modified 20161219
+        * called by getRoutingPointsForSelectedLeg() validates existing querystring for voyage against the one past in.
+        */
+        public String updateVoyage(String voyagestring, int returnxml)
+        {
+            // might be called from within from one of the overridden methods or potentially directly from Tramos
+
+            String content = "";
+
+            if (voyagestring != _voyagestring)
+            {
+                _voyagestring = voyagestring;
+
+                StringBuilder url = new StringBuilder();
+
+                url.Append(_wsns.ToString()).Append("/Voyage?").Append(voyagestring).Append("&scaneca=true").Append("&api_key=" + _apikey);
+
+                String errorMessage = "";
+                content = _downloadStringFromURL(url.ToString(), ref errorMessage);
+                this._voyagexml = XDocument.Parse(content);
+            }
+            else
+            {
+                content = this._voyagexml.ToString();
+            }
+
+            if (returnxml == 1)
+            {
+                return content;
+            }
+            else
+            {
+                return "";
+            }
+
+
+        }
+
+
+        /* 
         * date created 20161206
         * last modified 20161215
-        * unproven - TODO lets make it an option to return the voyagexml or not to calling routine.
+        * unproven, but called to update the voyage from the client 
         */
         public String getVoyage(String voyagestring, int sendxml)
         {
@@ -232,11 +268,44 @@ namespace mt.distances
         }
 
 
-        public class RoutingPoint
+        /* 
+        * date created 20161209
+        * last modified 20161222
+        * brand new - to do - perhaps work a better means to share the name vars of routing points
+        */
+        public String getRoutingPointsForSelectedLeg(int journeyId, String voyagestring)
         {
-            public String rp { get; set; }
-        }
+            // might be called from within from one of the overridden methods or potentially directly from Tramos
 
+            _rpShortCodesInLeg.Clear();
+            _rpNamesInLeg.Clear();
+            _rpOpenByDefaultInLeg.Clear();
+            
+            if (voyagestring!=_voyagestring)
+            {
+                this.updateVoyage(voyagestring, 0);
+            }
+
+
+            var leg = from voyage in _voyagexml.Descendants(_xmlns + "Leg").Skip(journeyId - 1).Take(1)
+                      select voyage.Element(_xmlns + "Waypoints");
+
+            StringBuilder routingPointsWithinLeg = new StringBuilder();
+
+            foreach (var item in leg.Elements(_xmlns + "Waypoint"))
+            {
+                String rpShortCode = item.Element(_xmlns + "RoutingPoint") != null ? item.Element(_xmlns + "RoutingPoint").Value : "";
+                
+                if (rpShortCode != "")
+                {
+                    _rpShortCodesInLeg.Append(rpShortCode + "|");
+                    _rpNamesInLeg.Append(_getRPName(rpShortCode) + "|");
+                    _rpOpenByDefaultInLeg.Append(_getOpenByDefault(rpShortCode) + "|");
+                }
+
+            }
+            return _rpShortCodesInLeg.ToString();
+        }
 
 
         /* 
@@ -244,7 +313,7 @@ namespace mt.distances
         * last modified 20161212
         * brand new - now it works!
         */
-        public String getRPsInsideVoyageLeg(int legIndex, String fromPort, String toPort)
+        public String getRPsInsideVoyageLeg(int journeyId, String fromPort, String toPort)
         {
             // might be called from within from one of the overridden methods or potentially directly from Tramos
 
@@ -293,7 +362,7 @@ namespace mt.distances
         /* 
         * date created 20161206
         * last modified 20161206
-        * unproven to work 
+        * unproven to work - currently works without the api-key as this is called before api-key is set.
         */
         private XDocument _getRoutingPoints()
         {
@@ -318,7 +387,6 @@ namespace mt.distances
         * created date  20161213
         * last modified 20161213
         */
-
         private String _getRPName(String rpShortCode)
         {
             var rps = (from rp in _routingpointxml.Descendants(_xmlns + "RoutingPoint")
@@ -326,8 +394,7 @@ namespace mt.distances
                       select rp.Element(_xmlns + "Name").Value).FirstOrDefault();
             return rps;
         }
-
-
+        
         private String _getOpenByDefault(String rpShortCode)
         {
             var rps = (from rp in _routingpointxml.Descendants(_xmlns + "RoutingPoint")
@@ -335,11 +402,7 @@ namespace mt.distances
                        select rp.Element(_xmlns + "OpenByDefault").Value).FirstOrDefault();
             return rps;
         }
-
-
         
-
-
         /* 
         * created date  20161129
         * last modified 20161208
@@ -382,7 +445,6 @@ namespace mt.distances
         * last modified 20161214
         * comment       new
         */
-
         public byte[] getImage(String voyagestring, String mapOptions)
         {
             /* StringBuilder optionstring = new StringBuilder();
@@ -439,6 +501,10 @@ namespace mt.distances
                 if (mapOptionList[2] != "") optionQueryString.Append("&height=").Append(mapOptionList[2].ToString());
                 /* AtoBviaC default for Environmental/Navigational/Regulatory is True */
                 if (mapOptionList[3] != "") optionQueryString.Append("&width=").Append(mapOptionList[3].ToString());
+
+                optionQueryString.Append("&landcolor=35,73,88&coastLineColor=76,188,208");
+
+
             }
             return optionQueryString.ToString();
         }
