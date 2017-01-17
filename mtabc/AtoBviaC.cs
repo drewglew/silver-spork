@@ -254,7 +254,6 @@ namespace tankers.distances
         */
         public String getVoyage(String voyagestring, int returnType)
         {
-            System.Windows.Forms.MessageBox.Show("_parseXMLContentToDWFormat - call");
             // might be called from within from one of the overridden methods or potentially directly from Tramos
 
             String content = "";
@@ -300,6 +299,7 @@ namespace tankers.distances
         * date created 20170116
         * last modified 20170117
         * Obtain delimited routing data from the voyage XML string
+        * DK0021~tCopenhagen~t0.000~t0.000~t1~r~nSOU~tRP Name~t23.223~t23.223~t1~r~n~tExit Baltic zone, Enter North Sea zone~t121.493~t144.716~t1~r~nSKA~tRP Name~t134.833~t13.340~t1~r~nGB0294~tLondon~t591.158~t604.498~t~t1~r~n
         */
         private StringBuilder _parseXMLContentToDWFormat(String voyageXML)
         {
@@ -311,8 +311,6 @@ namespace tankers.distances
             StringBuilder dwContent = new StringBuilder();
 
             int countOfLegs = (int)_voyagexml.Descendants(_xmlns + "Leg").Count();
-
-            System.Windows.Forms.MessageBox.Show("_parseXMLContentToDWFormat - step 5");
 
             var legs = (from e in _voyagexml.Descendants(_xmlns + "Legs").Elements(_xmlns + "Leg")
                         select new Leg()
@@ -334,49 +332,92 @@ namespace tankers.distances
 
                             }).First(),
                             
-                            WayPointList = e.Elements(_xmlns + "WayPoint")
+
+                            WayPointList = e.Element(_xmlns + "Waypoints").Elements(_xmlns + "Waypoint")
                             .Select(r => new WayPoint()
                             {
                                 name = r.Element(_xmlns + "Name") != null ? r.Element(_xmlns + "Name").Value : "",
                                 DistanceFromStart = Convert.ToDecimal(r.Element(_xmlns + "DistanceFromStart").Value),
-                                routingPointCode = r.Element(_xmlns + "RoutingPointCode") != null ? r.Element(_xmlns + "RoutingPointCode").Value : "",
+                                routingPointCode = r.Element(_xmlns + "RoutingPoint") != null ? r.Element(_xmlns + "RoutingPoint").Value : "",
                                 EcaZoneToPrevious = r.Element(_xmlns + "EcaZoneToPrevious") != null ? r.Element(_xmlns + "EcaZoneToPrevious").Value : ""
 
                             }).ToList()
                            
                         }).ToList();
 
-            System.Windows.Forms.MessageBox.Show("_parseXMLContentToDWFormat - step 5");
-
-
             foreach (Leg leg in legs)
             {
                 decimal distancePorttoPort = 0;
                 decimal sumOfDistancesSinceLastKnown = 0;
-                decimal distanceFromStartOfLastPort = 0;
-                
+                decimal LastPortDistanceFromStart = 0;
+                decimal sumOfEcaZoneDistancesSinceLastKnown = 0;
 
+               // string EcaZoneLastPort = "";
+
+                int wp_counter = 0;
+               // bool is_eca = false;
+                int is_eca = 0;
+                
                 /* now the fun begins */
                 foreach (WayPoint wp in leg.WayPointList)
                 {
-                    distancePorttoPort = wp.DistanceFromStart - distanceFromStartOfLastPort;
-
-                    if (wp.routingPointCode==null)
+                    if (wp_counter==0)
                     {
-                        sumOfDistancesSinceLastKnown += wp.DistanceFromStart;
-                    } else
-                    {
-                        // TODO get routing point name
-                        wayPointData.Append(wp.routingPointCode).Append("~t").Append("RP Name").Append("~t").Append(sumOfDistancesSinceLastKnown.ToString()).Append("~t").Append("0.0").Append("~t").Append("~r~n");
+                        if (wp.EcaZoneToPrevious!="")
+                        {
+                            // we start inside an eca zone
+                            leg.start_in_eca = true;
+                            is_eca = 1;
+                        } else
+                        {
+                            leg.start_in_eca = false;
+                            is_eca = 0;
+                        }
                     }
-                    distanceFromStartOfLastPort = wp.DistanceFromStart;
+
+                    distancePorttoPort = wp.DistanceFromStart - LastPortDistanceFromStart;
+                    sumOfDistancesSinceLastKnown += distancePorttoPort;
+
+                    if (is_eca == 1)
+                    {
+                        sumOfEcaZoneDistancesSinceLastKnown += distancePorttoPort;
+                    }
+
+                    if (leg.fromPort.code == wp.name)
+                    {
+                        // we are in the first port
+                        fromPortData.Append(leg.fromPort.code).Append("~t").Append(leg.fromPort.name).Append("~t").Append("0.000").Append("~t").Append("0.000").Append("~t").Append(is_eca.ToString()).Append("~r~n");
+                    } else if (leg.toPort.code == wp.name)
+                    {
+                        // we are in the last port
+                        toPortData.Append(leg.toPort.code).Append("~t").Append(leg.toPort.name).Append("~t").Append(sumOfDistancesSinceLastKnown.ToString()).Append("~t").Append(sumOfEcaZoneDistancesSinceLastKnown.ToString()).Append("~t").Append("~t").Append(is_eca.ToString()).Append("~r~n");
+                    }
+                    else
+                    {
+                        if (wp.name.Length>4 &&  wp.name.Substring(0, 5) == "Exit ")
+                        {
+                            wayPointData.Append("").Append("~t").Append(wp.name).Append("~t").Append(sumOfDistancesSinceLastKnown.ToString()).Append("~t").Append(sumOfEcaZoneDistancesSinceLastKnown.ToString()).Append("~t").Append(is_eca.ToString()).Append("~r~n");
+                        }
+                        else if (wp.routingPointCode != "")
+                        {
+                            
+                            wayPointData.Append(wp.routingPointCode).Append("~t").Append("RP Name").Append("~t").Append(sumOfDistancesSinceLastKnown.ToString()).Append("~t").Append(sumOfEcaZoneDistancesSinceLastKnown.ToString()).Append("~t").Append(is_eca.ToString()).Append("~r~n");
+                            sumOfDistancesSinceLastKnown = 0;
+                        }
+
+                        if (wp.name.Length > 4 && wp.name.Substring(0, 5) == "Exit ")
+                        {
+                            sumOfEcaZoneDistancesSinceLastKnown = 0;
+                        }
+
+                    }
+                    LastPortDistanceFromStart = wp.DistanceFromStart;
+                    wp_counter++;
                 }
-                fromPortData.Append(leg.fromPort.code).Append("~t").Append(leg.fromPort.name).Append("~t").Append("0").Append("~t").Append("0.0").Append("~t").Append("~r~n");
-                toPortData.Append(leg.toPort.code).Append("~t").Append(leg.toPort.name).Append("~t").Append("0").Append("~t").Append("0.0").Append("~t").Append("~r~n");
 
-                dwContent.Append(fromPortData).Append(wayPointData).Append(toPortData);
+                
             }
-
+            dwContent.Append(fromPortData).Append(wayPointData).Append(toPortData);
 
             return dwContent;
         }
@@ -637,16 +678,16 @@ namespace tankers.distances
         public Port toPort { get; set; }
         public decimal distance { get; set; }
         public decimal eca_distance { get; set; }
-        public bool is_eca { get; set; }
+        public bool start_in_eca { get; set; }
         public List<WayPoint> WayPointList { get; set;}
     }
 
     public class WayPoint
     {
-    public string name { get; set; }
-    public string routingPointCode { get; set; }
-    public decimal DistanceFromStart { get; set; }
-    public string EcaZoneToPrevious { get; set; }
+        public string name { get; set; }
+        public string routingPointCode { get; set; }
+        public decimal DistanceFromStart { get; set; }
+        public string EcaZoneToPrevious { get; set; }
     }
 
 
