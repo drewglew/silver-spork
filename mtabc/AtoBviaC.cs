@@ -7,8 +7,10 @@ using System.IO;
 using System.Linq;
 using System.Xml.Linq;
 using System.Collections.Generic;
+using tankers.distances.models.datawindow;
+using System.Collections;
 
-namespace mt.distances
+namespace tankers.distances
 {
     [ComVisible(true)]
     [ClassInterface(ClassInterfaceType.AutoDual)]
@@ -26,6 +28,13 @@ namespace mt.distances
         private StringBuilder _rpShortCodesInLeg = new StringBuilder();
         private StringBuilder _rpNamesInLeg = new StringBuilder();
         private StringBuilder _rpOpenByDefaultInLeg = new StringBuilder();
+
+        enum dataFormat
+        {
+            None,
+            XML,
+            PBDataWindowSyntax
+        };
 
         /* date created 20161205 */
         /* last modified 20161205 */
@@ -192,7 +201,7 @@ namespace mt.distances
         * last modified 20161219
         * called by getRoutingPointsForSelectedLeg() validates existing querystring for voyage against the one past in.
         */
-        public String updateVoyage(String voyagestring, int returnxml)
+        public String updateVoyage(String voyagestring, int returnType)
         {
             // might be called from within from one of the overridden methods or potentially directly from Tramos
 
@@ -215,15 +224,25 @@ namespace mt.distances
                 content = this._voyagexml.ToString();
             }
 
-            if (returnxml == 1)
+            if (returnType == (int)dataFormat.XML)
             {
                 return content;
             }
-            else
+            else if (returnType == (int)dataFormat.PBDataWindowSyntax)
+            {
+                /* construct data that will be loaded into the calling datawindow */
+                StringBuilder dwContent = new StringBuilder();
+
+                dwContent = _parseXMLContentToDWFormat(content);
+
+                return dwContent.ToString();
+
+            }
+            else if (returnType == (int)dataFormat.None)
             {
                 return "";
             }
-
+            return "error, unhandled";
 
         }
 
@@ -233,8 +252,9 @@ namespace mt.distances
         * last modified 20161215
         * unproven, but called to update the voyage from the client 
         */
-        public String getVoyage(String voyagestring, int sendxml)
+        public String getVoyage(String voyagestring, int returnType)
         {
+            System.Windows.Forms.MessageBox.Show("_parseXMLContentToDWFormat - call");
             // might be called from within from one of the overridden methods or potentially directly from Tramos
 
             String content = "";
@@ -255,16 +275,110 @@ namespace mt.distances
                 content = this._voyagexml.ToString();
             }
 
-            if (sendxml == 1)
+            if (returnType == (int)dataFormat.XML)
             {
                 return content;
-            }
-            else
+            } else if (returnType == (int)dataFormat.PBDataWindowSyntax)
+            {
+
+                /* construct data that will be loaded into the calling datawindow */
+                StringBuilder dwContent = new StringBuilder();
+
+                dwContent = _parseXMLContentToDWFormat(content);
+
+                return dwContent.ToString();
+
+            } else if (returnType == (int)dataFormat.None)
             {
                 return "";
             }
+            return "error, unhandled";
+        }
 
 
+        /* 
+        * date created 20170116
+        * last modified 20170117
+        * Obtain delimited routing data from the voyage XML string
+        */
+        private StringBuilder _parseXMLContentToDWFormat(String voyageXML)
+        {
+            ArrayList Routing = new ArrayList();
+
+            StringBuilder wayPointData = new StringBuilder();
+            StringBuilder fromPortData = new StringBuilder();
+            StringBuilder toPortData = new StringBuilder();
+            StringBuilder dwContent = new StringBuilder();
+
+            int countOfLegs = (int)_voyagexml.Descendants(_xmlns + "Leg").Count();
+
+            System.Windows.Forms.MessageBox.Show("_parseXMLContentToDWFormat - step 5");
+
+            var legs = (from e in _voyagexml.Descendants(_xmlns + "Legs").Elements(_xmlns + "Leg")
+                        select new Leg()
+                        {
+                            
+                            fromPort = e.Elements(_xmlns + "FromPort")
+                            .Select(r => new Port()
+                            {
+                                 name = (string)r.Element(_xmlns + "Name"),
+                                 code = (string)r.Element(_xmlns + "Code")
+                              
+                            }).FirstOrDefault(),
+                            
+                            toPort = e.Elements(_xmlns + "ToPort")
+                            .Select(r => new Port()
+                            {
+                                name = r.Element(_xmlns + "Name") != null ? r.Element(_xmlns + "Name").Value : "",
+                                code = r.Element(_xmlns + "Code") != null ? r.Element(_xmlns + "Code").Value : "",
+
+                            }).First(),
+                            
+                            WayPointList = e.Elements(_xmlns + "WayPoint")
+                            .Select(r => new WayPoint()
+                            {
+                                name = r.Element(_xmlns + "Name") != null ? r.Element(_xmlns + "Name").Value : "",
+                                DistanceFromStart = Convert.ToDecimal(r.Element(_xmlns + "DistanceFromStart").Value),
+                                routingPointCode = r.Element(_xmlns + "RoutingPointCode") != null ? r.Element(_xmlns + "RoutingPointCode").Value : "",
+                                EcaZoneToPrevious = r.Element(_xmlns + "EcaZoneToPrevious") != null ? r.Element(_xmlns + "EcaZoneToPrevious").Value : ""
+
+                            }).ToList()
+                           
+                        }).ToList();
+
+            System.Windows.Forms.MessageBox.Show("_parseXMLContentToDWFormat - step 5");
+
+
+            foreach (Leg leg in legs)
+            {
+                decimal distancePorttoPort = 0;
+                decimal sumOfDistancesSinceLastKnown = 0;
+                decimal distanceFromStartOfLastPort = 0;
+                
+
+                /* now the fun begins */
+                foreach (WayPoint wp in leg.WayPointList)
+                {
+                    distancePorttoPort = wp.DistanceFromStart - distanceFromStartOfLastPort;
+
+                    if (wp.routingPointCode==null)
+                    {
+                        sumOfDistancesSinceLastKnown += wp.DistanceFromStart;
+                    } else
+                    {
+                        // TODO get routing point name
+                        wayPointData.Append(wp.routingPointCode).Append("~t").Append("RP Name").Append("~t").Append(sumOfDistancesSinceLastKnown.ToString()).Append("~t").Append("0.0").Append("~t").Append("~r~n");
+                    }
+                    distanceFromStartOfLastPort = wp.DistanceFromStart;
+                }
+                fromPortData.Append(leg.fromPort.code).Append("~t").Append(leg.fromPort.name).Append("~t").Append("0").Append("~t").Append("0.0").Append("~t").Append("~r~n");
+                toPortData.Append(leg.toPort.code).Append("~t").Append(leg.toPort.name).Append("~t").Append("0").Append("~t").Append("0.0").Append("~t").Append("~r~n");
+
+                dwContent.Append(fromPortData).Append(wayPointData).Append(toPortData);
+            }
+
+
+            return dwContent;
         }
 
 
@@ -280,8 +394,8 @@ namespace mt.distances
             _rpShortCodesInLeg.Clear();
             _rpNamesInLeg.Clear();
             _rpOpenByDefaultInLeg.Clear();
-            
-            if (voyagestring!=_voyagestring)
+
+            if (voyagestring != _voyagestring)
             {
                 this.updateVoyage(voyagestring, 0);
             }
@@ -295,7 +409,7 @@ namespace mt.distances
             foreach (var item in leg.Elements(_xmlns + "Waypoint"))
             {
                 String rpShortCode = item.Element(_xmlns + "RoutingPoint") != null ? item.Element(_xmlns + "RoutingPoint").Value : "";
-                
+
                 if (rpShortCode != "")
                 {
                     _rpShortCodesInLeg.Append(rpShortCode + "|");
@@ -322,7 +436,7 @@ namespace mt.distances
             _rpOpenByDefaultInLeg.Clear();
 
             var leg = from voyage in _voyagexml.Descendants(_xmlns + "Leg")
-                       where  voyage.Element(_xmlns + "ToPort").Element(_xmlns + "Code").Value.Contains(toPort) && voyage.Element(_xmlns + "FromPort").Element(_xmlns + "Code").Value.Contains(fromPort)
+                      where voyage.Element(_xmlns + "ToPort").Element(_xmlns + "Code").Value.Contains(toPort) && voyage.Element(_xmlns + "FromPort").Element(_xmlns + "Code").Value.Contains(fromPort)
                       select voyage.Element(_xmlns + "Waypoints");
 
             StringBuilder routingPointsWithinLeg = new StringBuilder();
@@ -390,11 +504,11 @@ namespace mt.distances
         private String _getRPName(String rpShortCode)
         {
             var rps = (from rp in _routingpointxml.Descendants(_xmlns + "RoutingPoint")
-                      where rp.Element(_xmlns + "ShortCode").Value.Contains(rpShortCode)
-                      select rp.Element(_xmlns + "Name").Value).FirstOrDefault();
+                       where rp.Element(_xmlns + "ShortCode").Value.Contains(rpShortCode)
+                       select rp.Element(_xmlns + "Name").Value).FirstOrDefault();
             return rps;
         }
-        
+
         private String _getOpenByDefault(String rpShortCode)
         {
             var rps = (from rp in _routingpointxml.Descendants(_xmlns + "RoutingPoint")
@@ -402,12 +516,12 @@ namespace mt.distances
                        select rp.Element(_xmlns + "OpenByDefault").Value).FirstOrDefault();
             return rps;
         }
-        
+
         /* 
         * created date  20161129
         * last modified 20161208
         */
-        public String getRPbyType(int rpType,String queryParm)
+        public String getRPbyType(int rpType, String queryParm)
         {
             /*  getRPbyType - AtoBviaC have a set of default Open and Closed ports.  This method
                 provides a querystring segment that is used on first presentation of routing 
@@ -425,11 +539,11 @@ namespace mt.distances
             }
 
             var rps = from rp in _routingpointxml.Descendants(_xmlns + "RoutingPoint")
-                        where rp.Element(_xmlns + "OpenByDefault").Value.Contains(openByDefaultFlag.ToString())
-                        select new
-                        {
-                            RoutingPointCode = rp.Element(_xmlns + "ShortCode").Value,
-                        };
+                      where rp.Element(_xmlns + "OpenByDefault").Value.Contains(openByDefaultFlag.ToString())
+                      select new
+                      {
+                          RoutingPointCode = rp.Element(_xmlns + "ShortCode").Value,
+                      };
 
             StringBuilder selectedRPs = new StringBuilder();
 
@@ -455,9 +569,9 @@ namespace mt.distances
             url.Append(_wsns.ToString()).Append("/Image?").Append(voyagestring).Append(_composeMapOptionString(mapOptions)).Append("&api_key=" + _apikey);
 
             String errorMessage = "";
-            
+
             byte[] content = _downloadDataFromURL(url.ToString(), ref errorMessage);
-            
+
             return content;
         }
 
@@ -509,8 +623,31 @@ namespace mt.distances
             return optionQueryString.ToString();
         }
 
-
-
-
     }
+
+    public class Port
+    {
+        public string name { get; set; }
+        public string code { get; set; }
+    }
+
+    public class Leg
+    {
+        public Port fromPort { get; set; }
+        public Port toPort { get; set; }
+        public decimal distance { get; set; }
+        public decimal eca_distance { get; set; }
+        public bool is_eca { get; set; }
+        public List<WayPoint> WayPointList { get; set;}
+    }
+
+    public class WayPoint
+    {
+    public string name { get; set; }
+    public string routingPointCode { get; set; }
+    public decimal DistanceFromStart { get; set; }
+    public string EcaZoneToPrevious { get; set; }
+    }
+
+
 }
