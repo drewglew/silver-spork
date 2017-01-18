@@ -297,9 +297,9 @@ namespace tankers.distances
 
         /* 
         * date created 20170116
-        * last modified 20170117
+        * last modified 20170118
         * Obtain delimited routing data from the voyage XML string
-        * DK0021~tCopenhagen~t0.000~t0.000~t1~r~nSOU~tRP Name~t23.223~t23.223~t1~r~n~tExit Baltic zone, Enter North Sea zone~t121.493~t144.716~t1~r~nSKA~tRP Name~t134.833~t13.340~t1~r~nGB0294~tLondon~t591.158~t604.498~t~t1~r~n
+        * DK0021~tCopenhagen~t0.000~t0.000~t1\r~nSOU~tRP Name~t23.223~t23.223~t1\r\n~tExit Baltic zone, Enter North Sea zone~t121.493~t144.716~t1\r~nSKA~tRP Name~t134.833~t13.340~t1\r~nGB0294~tLondon~t591.158~t604.498\t~t1\r\n
         */
         private StringBuilder _parseXMLContentToDWFormat(String voyageXML)
         {
@@ -386,22 +386,21 @@ namespace tankers.distances
                     if (leg.fromPort.code == wp.name)
                     {
                         // we are in the first port
-                        fromPortData.Append(leg.fromPort.code).Append("~t").Append(leg.fromPort.name).Append("~t").Append("0.000").Append("~t").Append("0.000").Append("~t").Append(is_eca.ToString()).Append("~r~n");
+                        fromPortData.Append(leg.fromPort.code).Append("\t").Append(leg.fromPort.name).Append("\t").Append("0.000").Append("\t").Append("0.000").Append("\t").Append(is_eca).Append("\r\n");
                     } else if (leg.toPort.code == wp.name)
                     {
                         // we are in the last port
-                        toPortData.Append(leg.toPort.code).Append("~t").Append(leg.toPort.name).Append("~t").Append(sumOfDistancesSinceLastKnown.ToString()).Append("~t").Append(sumOfEcaZoneDistancesSinceLastKnown.ToString()).Append("~t").Append("~t").Append(is_eca.ToString()).Append("~r~n");
+                        toPortData.Append(leg.toPort.code).Append("\t").Append(leg.toPort.name).Append("\t").Append(sumOfDistancesSinceLastKnown.ToString()).Append("\t").Append(sumOfEcaZoneDistancesSinceLastKnown.ToString()).Append("\t").Append(is_eca).Append("\r\n");
                     }
                     else
                     {
                         if (wp.name.Length>4 &&  wp.name.Substring(0, 5) == "Exit ")
                         {
-                            wayPointData.Append("").Append("~t").Append(wp.name).Append("~t").Append(sumOfDistancesSinceLastKnown.ToString()).Append("~t").Append(sumOfEcaZoneDistancesSinceLastKnown.ToString()).Append("~t").Append(is_eca.ToString()).Append("~r~n");
+                            wayPointData.Append("").Append("\t").Append(wp.name).Append("\t").Append(sumOfDistancesSinceLastKnown.ToString()).Append("\t").Append(sumOfEcaZoneDistancesSinceLastKnown.ToString()).Append("\t").Append(is_eca).Append("\r\n");
                         }
                         else if (wp.routingPointCode != "")
                         {
-                            
-                            wayPointData.Append(wp.routingPointCode).Append("~t").Append("RP Name").Append("~t").Append(sumOfDistancesSinceLastKnown.ToString()).Append("~t").Append(sumOfEcaZoneDistancesSinceLastKnown.ToString()).Append("~t").Append(is_eca.ToString()).Append("~r~n");
+                            wayPointData.Append(wp.routingPointCode).Append("\t").Append(_getRPName(wp.routingPointCode)).Append("\t").Append(sumOfDistancesSinceLastKnown.ToString()).Append("\t").Append(sumOfEcaZoneDistancesSinceLastKnown.ToString()).Append("\t").Append(is_eca).Append("\r\n");
                             sumOfDistancesSinceLastKnown = 0;
                         }
 
@@ -544,10 +543,10 @@ namespace tankers.distances
         */
         private String _getRPName(String rpShortCode)
         {
-            var rps = (from rp in _routingpointxml.Descendants(_xmlns + "RoutingPoint")
+            var rpname = (from rp in _routingpointxml.Descendants(_xmlns + "RoutingPoint")
                        where rp.Element(_xmlns + "ShortCode").Value.Contains(rpShortCode)
                        select rp.Element(_xmlns + "Name").Value).FirstOrDefault();
-            return rps;
+            return rpname;
         }
 
         private String _getOpenByDefault(String rpShortCode)
@@ -664,6 +663,7 @@ namespace tankers.distances
             return optionQueryString.ToString();
         }
 
+        
     }
 
     public class Port
@@ -690,5 +690,5 @@ namespace tankers.distances
         public string EcaZoneToPrevious { get; set; }
     }
 
-
+    
 }
