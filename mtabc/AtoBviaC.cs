@@ -345,78 +345,79 @@ namespace tankers.distances
                            
                         }).ToList();
 
+            int legIndex = 0;
             foreach (Leg leg in legs)
             {
+                legIndex++;
                 decimal distancePorttoPort = 0;
                 decimal sumOfDistancesSinceLastKnown = 0;
                 decimal LastPortDistanceFromStart = 0;
                 decimal sumOfEcaZoneDistancesSinceLastKnown = 0;
 
-               // string EcaZoneLastPort = "";
-
+                wayPointData = new StringBuilder();
+                fromPortData = new StringBuilder();
+                toPortData = new StringBuilder();
+                
                 int wp_counter = 0;
-               // bool is_eca = false;
                 int is_eca = 0;
                 
                 /* now the fun begins */
                 foreach (WayPoint wp in leg.WayPointList)
                 {
-                    if (wp_counter==0)
-                    {
-                        if (wp.EcaZoneToPrevious!="")
-                        {
-                            // we start inside an eca zone
-                            leg.start_in_eca = true;
-                            is_eca = 1;
-                        } else
-                        {
-                            leg.start_in_eca = false;
-                            is_eca = 0;
-                        }
-                    }
-
                     distancePorttoPort = wp.DistanceFromStart - LastPortDistanceFromStart;
                     sumOfDistancesSinceLastKnown += distancePorttoPort;
 
-                    if (is_eca == 1)
+
+
+                    if (wp.EcaZoneToPrevious!="")
                     {
+                        is_eca = 1;
                         sumOfEcaZoneDistancesSinceLastKnown += distancePorttoPort;
+                    } else
+                    {
+                        is_eca = 0;
+                        sumOfEcaZoneDistancesSinceLastKnown = 0;
                     }
 
-                    if (leg.fromPort.code == wp.name)
+                    if (leg.fromPort.code == wp.name && legIndex==1)
                     {
-                        // we are in the first port
+                        // we are in the first port of the first leg - write out the initial port
                         fromPortData.Append(leg.fromPort.code).Append("\t").Append(leg.fromPort.name).Append("\t").Append("0.000").Append("\t").Append("0.000").Append("\t").Append(is_eca).Append("\r\n");
                     } else if (leg.toPort.code == wp.name)
                     {
-                        // we are in the last port
+                        // we are in the last port of the leg.  We always write this data out.
                         toPortData.Append(leg.toPort.code).Append("\t").Append(leg.toPort.name).Append("\t").Append(sumOfDistancesSinceLastKnown.ToString()).Append("\t").Append(sumOfEcaZoneDistancesSinceLastKnown.ToString()).Append("\t").Append(is_eca).Append("\r\n");
                     }
                     else
                     {
-                        if (wp.name.Length>4 &&  wp.name.Substring(0, 5) == "Exit ")
+                        if ((wp.name.Length>4 &&  wp.name.Substring(0, 5) == "Exit ") || wp.name.IndexOf("Enter ")>=0)
                         {
                             wayPointData.Append("").Append("\t").Append(wp.name).Append("\t").Append(sumOfDistancesSinceLastKnown.ToString()).Append("\t").Append(sumOfEcaZoneDistancesSinceLastKnown.ToString()).Append("\t").Append(is_eca).Append("\r\n");
+
                         }
+                        
                         else if (wp.routingPointCode != "")
                         {
                             wayPointData.Append(wp.routingPointCode).Append("\t").Append(_getRPName(wp.routingPointCode)).Append("\t").Append(sumOfDistancesSinceLastKnown.ToString()).Append("\t").Append(sumOfEcaZoneDistancesSinceLastKnown.ToString()).Append("\t").Append(is_eca).Append("\r\n");
                             sumOfDistancesSinceLastKnown = 0;
+                            sumOfEcaZoneDistancesSinceLastKnown = 0;
                         }
 
-                        if (wp.name.Length > 4 && wp.name.Substring(0, 5) == "Exit ")
+
+                        if (wp.name.Length > 4 && wp.name.Substring(0, 5) == "Exit " || wp.name.IndexOf("Enter ") >= 0)
                         {
                             sumOfEcaZoneDistancesSinceLastKnown = 0;
+                            sumOfDistancesSinceLastKnown = 0;
                         }
 
                     }
                     LastPortDistanceFromStart = wp.DistanceFromStart;
                     wp_counter++;
                 }
+                dwContent.Append(fromPortData).Append(wayPointData).Append(toPortData);
 
-                
             }
-            dwContent.Append(fromPortData).Append(wayPointData).Append(toPortData);
+            
 
             return dwContent;
         }
@@ -656,7 +657,8 @@ namespace tankers.distances
                 /* AtoBviaC default for Environmental/Navigational/Regulatory is True */
                 if (mapOptionList[3] != "") optionQueryString.Append("&width=").Append(mapOptionList[3].ToString());
 
-                optionQueryString.Append("&landcolor=35,73,88&coastLineColor=76,188,208");
+                // We need to decide if we change default colours
+                // optionQueryString.Append("&landcolor=35,73,88&coastLineColor=76,188,208");
 
 
             }
