@@ -25,6 +25,7 @@ namespace tankers.distances
         private String _voyagestring;
         private XDocument _routingpointxml;
         private XDocument _voyagexml;
+        private XDocument _portsxml;
         private StringBuilder _rpShortCodesInLeg = new StringBuilder();
         private StringBuilder _rpNamesInLeg = new StringBuilder();
         private StringBuilder _rpOpenByDefaultInLeg = new StringBuilder();
@@ -36,27 +37,41 @@ namespace tankers.distances
             PBDataWindowSyntax
         };
 
-        /* date created 20161205 */
-        /* last modified 20161205 */
-        /* constructor */
+        /// <summary>
+        /// the constructor of the main class AtoBviaC
+        /// 
+        /// date created        20161205
+        /// last modified       20170119
+        /// author              AGL027
+        /// </summary>
         public AtoBviaC()
         {
             _xmlns = "http://api.atobviaconline.com/v1";
             _wsns = "https://api.atobviaconline.com/v1";
+            /* this method does not require api_key */
             _routingpointxml = _getRoutingPoints();
         }
 
-        /* date created 20161215 */
-        /* last modified 20161215 */
-        /* No need to hardcode the api_key value in here. */
+        /// <summary>
+        /// this must be called by the requestor to load the necessary api_key that is needed by AtoBviaC.
+        /// api_key must be stored in client application.
+        /// 
+        /// date created        20161215
+        /// last modified       20171215
+        /// author              AGL027
+        /// </summary>
         public void setApiKey(String apikey)
         {
             _apikey = apikey;
         }
 
-        /* date created 20161205 
-         * last modified 20161205 
-         * low level communication to web service; this is to handle image processing */
+        /// <summary>
+        /// low level communication to web service; this is to handle image processing
+        /// 
+        /// date created        20161205
+        /// last modified       20161205
+        /// author              AGL027
+        /// </summary>
         private byte[] _downloadDataFromURL(String url, ref String errorMessage)
         {
             byte[] content = new byte[0];
@@ -79,9 +94,13 @@ namespace tankers.distances
             return content;
         }
 
-        /* date created 20161205 
-         * last modified 20161205 
-         * low level communication to web service; this is to handle strings */
+        /// <summary>
+        /// low level communication to web service; this is to handle strings
+        /// 
+        /// date created        20161205
+        /// last modified       20161205
+        /// author              AGL027
+        /// </summary>
         private String _downloadStringFromURL(String url, ref String errorMessage)
         {
             String content = "";
@@ -106,23 +125,22 @@ namespace tankers.distances
             return content;
         }
 
-        /* date created 20161205
-         * last modified 20161206
-         * works 
-         * TODO - expand to handle partial routing points?
-         */
+        /// <summary>
+        /// this method transforms the delimited items received from PowerBuilder and transforms into some sort of querystring segment.
+        /// If method is to obtain the map the ports are transformed into port names.
+        /// TODO - expand to handle partial routing points?
+        /// 
+        /// date created        20161205
+        /// last modified       20170119
+        /// author              AGL027
+        /// </summary>
         public String transformToUrl(String method, String ports, String openports, String closeports)
         {
-
-            /* taken away the routing string temporarily.
-             * this method transforms the delimited items received from PowerBuilder 
-             * and transforms into some sort of querystring segment.
-             */
-
             String parturl;
             String portParms = "";
             String openParms = "";
             String closeParms = "";
+            String portArg = "";
 
             List<string> portList;
             List<string> openList;
@@ -146,7 +164,22 @@ namespace tankers.distances
                     {
                         firstArg = false;
                     }
-                    portParms += "port=" + port;
+
+                    if (method == "image")
+                    {
+                        if (_portsxml == null)
+                        { 
+                            _portsxml = _getPorts();
+                        }
+                        // obtain nice port name and escape problems chars i.e. <space> 
+                        portArg = Uri.EscapeDataString(_getPortName(port));
+                    } else
+                    {
+                        portArg = port;
+                    }
+
+                    portParms += "port=" + portArg;
+
                 }
             }
             foreach (var routingpoint in openList)
@@ -168,11 +201,13 @@ namespace tankers.distances
             return parturl;
         }
 
-
-
-        /* date created 20161205 
-         * last modified 20161205
-         * proven to work - direct call to return a simple string containing total distance in voyage */
+        /// <summary>
+        /// direct call to return a simple string containing total distance in voyage
+        /// 
+        /// date created        20161205
+        /// last modified       20161205
+        /// author              AGL027
+        /// </summary>
         public String getDistance(String voyagestring)
         {
 
@@ -195,12 +230,14 @@ namespace tankers.distances
             return content;
         }
 
-
-        /* 
-        * date created 20161219
-        * last modified 20161219
-        * called by getRoutingPointsForSelectedLeg() validates existing querystring for voyage against the one past in.
-        */
+        /// <summary>
+        /// called by getRoutingPointsForSelectedLeg() validates existing querystring for voyage against the one past in.
+        /// TODO choose what to keep; updateVoyage() or getVoyage()? 
+        /// 
+        /// date created        20161219
+        /// last modified       20161219
+        /// author              AGL027
+        /// </summary>
         public String updateVoyage(String voyagestring, int returnType)
         {
             // might be called from within from one of the overridden methods or potentially directly from Tramos
@@ -246,12 +283,14 @@ namespace tankers.distances
 
         }
 
-
-        /* 
-        * date created 20161206
-        * last modified 20161215
-        * unproven, but called to update the voyage from the client 
-        */
+        /// <summary>
+        /// called to update the voyage from the client.
+        /// TODO choose what to keep; updateVoyage() or getVoyage()? 
+        /// 
+        /// date created        20161206
+        /// last modified       20161215
+        /// author              AGL027
+        /// </summary>
         public String getVoyage(String voyagestring, int returnType)
         {
             // might be called from within from one of the overridden methods or potentially directly from Tramos
@@ -294,13 +333,13 @@ namespace tankers.distances
             return "error, unhandled";
         }
 
-
-        /* 
-        * date created 20170116
-        * last modified 20170118
-        * Obtain delimited routing data from the voyage XML string
-        * DK0021~tCopenhagen~t0.000~t0.000~t1\r~nSOU~tRP Name~t23.223~t23.223~t1\r\n~tExit Baltic zone, Enter North Sea zone~t121.493~t144.716~t1\r~nSKA~tRP Name~t134.833~t13.340~t1\r~nGB0294~tLondon~t591.158~t604.498\t~t1\r\n
-        */
+        /// <summary>
+        /// Obtain delimited routing data from the voyage XML string
+        /// 
+        /// date created        20170116
+        /// last modified       20170118
+        /// author              AGL027
+        /// </summary>
         private StringBuilder _parseXMLContentToDWFormat(String voyageXML)
         {
             ArrayList Routing = new ArrayList();
@@ -422,16 +461,16 @@ namespace tankers.distances
             return dwContent;
         }
 
-
-        /* 
-        * date created 20161209
-        * last modified 20161222
-        * brand new - to do - perhaps work a better means to share the name vars of routing points
-        */
+        /// <summary>
+        /// Given a single leg & voyage string (querystring) get the routing points inside.  might be called from within from one of the overridden methods or potentially directly from Tramos
+        /// TODO - perhaps work a better means to share the name vars of routing points
+        /// 
+        /// date created        20161209
+        /// last modified       20161222
+        /// author              AGL027
+        /// </summary>
         public String getRoutingPointsForSelectedLeg(int journeyId, String voyagestring)
         {
-            // might be called from within from one of the overridden methods or potentially directly from Tramos
-
             _rpShortCodesInLeg.Clear();
             _rpNamesInLeg.Clear();
             _rpOpenByDefaultInLeg.Clear();
@@ -462,16 +501,16 @@ namespace tankers.distances
             return _rpShortCodesInLeg.ToString();
         }
 
-
-        /* 
-        * date created 20161209
-        * last modified 20161212
-        * brand new - now it works!
-        */
+        /// <summary>
+        /// Similar to getRoutingPointsForSelectedLeg(int journeyId, String voyagestring)
+        /// this requires just the fromPort and toPort detail.  Once again should be called from within from one of the overridden methods or potentially directly from Tramos
+        /// 
+        /// date created        20161209
+        /// last modified       20161212
+        /// author              AGL027
+        /// </summary>
         public String getRPsInsideVoyageLeg(int journeyId, String fromPort, String toPort)
         {
-            // might be called from within from one of the overridden methods or potentially directly from Tramos
-
             _rpShortCodesInLeg.Clear();
             _rpNamesInLeg.Clear();
             _rpOpenByDefaultInLeg.Clear();
@@ -498,33 +537,60 @@ namespace tankers.distances
         }
 
 
+        /// <summary>
+        /// Obtain single delimited collection of routing point names inside a string
+        /// 
+        /// date created        ??????
+        /// last modified       ??????
+        /// author              AGL027
+        /// </summary>
         public String getRPNamesInsideLeg()
         {
             return _rpNamesInLeg.ToString();
         }
-
+        
+        /// <summary>
+        /// Obtain single delimited collection of routing point short codes inside a string
+        /// 
+        /// date created        ??????
+        /// last modified       ??????
+        /// author              AGL027
+        /// </summary>
         public String getRPShortCodesInsideLeg()
         {
             return _rpShortCodesInLeg.ToString();
         }
 
+        /// <summary>
+        /// Obtain single delimited collection of routing point short codes that are open inside a string
+        /// 
+        /// date created        ??????
+        /// last modified       ??????
+        /// author              AGL027
+        /// </summary>
         public String getRPOpenByDefaultInsideLeg()
         {
             return _rpOpenByDefaultInLeg.ToString();
         }
 
-
-        /* 
-        * date created 20161206
-        * last modified 20161206
-        * unproven to work - currently works without the api-key as this is called before api-key is set.
-        */
+        /// <summary>
+        /// Direct call to web service that gets the data for all Routing Points and allows us to load this into an
+        /// XMLDocument data object.  This method is not dependent on a valid api_key.
+        /// TODO - could be optimized
+        /// 
+        /// date created        20161206
+        /// last modified       20170119
+        /// author              AGL027
+        /// </summary>
         private XDocument _getRoutingPoints()
         {
-            String url = "https://api.atobviaconline.com/v1/RoutingPoints?api_key=" + _apikey;
+
+            StringBuilder url = new StringBuilder();
+            url.Append(_wsns).Append("/RoutingPoints?api_key=").Append(_apikey);
+            
             WebClient syncClient = new WebClient();
             syncClient.Headers.Add("accept", "application/xml");
-            String content = syncClient.DownloadString(url);
+            String content = syncClient.DownloadString(url.ToString());
             XDocument rpXml = new XDocument();
 
             try
@@ -538,10 +604,44 @@ namespace tankers.distances
             return rpXml;
         }
 
-        /* 
-        * created date  20161213
-        * last modified 20161213
-        */
+        /// <summary>
+        /// Direct call to web service that gets the data for all Ports and allows us to load this into an
+        /// XMLDocument data object.  This method is dependent on a valid api_key.
+        /// 
+        /// date created        20170119
+        /// last modified       20170119
+        /// author              AGL027
+        /// </summary>
+        private XDocument _getPorts()
+        {
+            StringBuilder url = new StringBuilder();
+            url.Append(_wsns).Append("/Ports?api_key=").Append(_apikey);
+
+            WebClient syncClient = new WebClient();
+            syncClient.Headers.Add("accept", "application/xml");
+            String content = syncClient.DownloadString(url.ToString());
+            System.Windows.Forms.MessageBox.Show("this works!");
+
+            XDocument portXml = new XDocument();
+
+            try
+            {
+                portXml = XDocument.Parse(content);
+            }
+            catch (System.Xml.XmlException)
+            {
+                System.Windows.Forms.MessageBox.Show("error in obtaining routing point data");
+            }
+            return portXml;
+        }
+
+        /// <summary>
+        /// Get the full routing point name of Routing Point ShortName that is passed in.
+        /// 
+        /// date created        20161213
+        /// last modified       20161213
+        /// author              AGL027
+        /// </summary>
         private String _getRPName(String rpShortCode)
         {
             var rpname = (from rp in _routingpointxml.Descendants(_xmlns + "RoutingPoint")
@@ -550,6 +650,28 @@ namespace tankers.distances
             return rpname;
         }
 
+        /// <summary>
+        /// Get the full port name of Port Code that is passed in.
+        /// 
+        /// date created        20170119
+        /// last modified       20170119
+        /// author              AGL027
+        /// </summary>
+        private String _getPortName(String portCode)
+        {
+            var portname = (from p in _portsxml.Descendants(_xmlns + "Port")
+                          where p.Element(_xmlns + "Code").Value.Contains(portCode)
+                          select p.Element(_xmlns + "Name").Value).FirstOrDefault();
+            return portname;
+        }
+
+        /// <summary>
+        /// Simply get OpenByDefault value from the routing point XMLDocument object.
+        /// 
+        /// date created        ??????
+        /// last modified       ??????
+        /// author              AGL027
+        /// </summary>
         private String _getOpenByDefault(String rpShortCode)
         {
             var rps = (from rp in _routingpointxml.Descendants(_xmlns + "RoutingPoint")
@@ -558,16 +680,15 @@ namespace tankers.distances
             return rps;
         }
 
-        /* 
-        * created date  20161129
-        * last modified 20161208
-        */
+        /// <summary>
+        /// AtoBviaC have a set of default Open and Closed ports.  This method provides a querystring segment that is used on first presentation of routing 
+        /// 
+        /// date created        20161129
+        /// last modified       20161208
+        /// author              AGL027
+        /// </summary>
         public String getRPbyType(int rpType, String queryParm)
         {
-            /*  getRPbyType - AtoBviaC have a set of default Open and Closed ports.  This method
-                provides a querystring segment that is used on first presentation of routing 
-            */
-
             StringBuilder openByDefaultFlag = new StringBuilder();
 
             if (rpType == 1) // opened 
@@ -595,11 +716,13 @@ namespace tankers.distances
             return selectedRPs.ToString();
         }
 
-        /* 
-        * created date  20161214
-        * last modified 20161214
-        * comment       new
-        */
+        /// <summary>
+        /// This method with public scope is called by consumer to obtain the map image.  It requires assistance from both  _composeMapOptionString() and _downloadDataFromURL()
+        /// 
+        /// date created        20161214
+        /// last modified       20161214
+        /// author              AGL027
+        /// </summary>
         public byte[] getImage(String voyagestring, String mapOptions)
         {
             /* StringBuilder optionstring = new StringBuilder();
@@ -616,11 +739,13 @@ namespace tankers.distances
             return content;
         }
 
-        /* 
-        * created date  20161214
-        * last modified 20161214
-        * comment       new
-        */
+        /// <summary>
+        /// This method is called by the getImage() method to construct the options that can be used when presenting the map image.
+        /// 
+        /// date created        20161214
+        /// last modified       20161214
+        /// author              AGL027
+        /// </summary>
         private String _composeMapOptionString(String optionMapString)
         {
             List<string> mapOptionList;
@@ -641,8 +766,7 @@ namespace tankers.distances
                 {
                     optionQueryString.Append("&showSecaZones=false");
                 }
-
-
+                
                 if (mapOptionList[1] == "1")
                 {
                     optionQueryString.Append("&zoom=true");
@@ -659,8 +783,6 @@ namespace tankers.distances
 
                 // We need to decide if we change default colours
                 // optionQueryString.Append("&landcolor=35,73,88&coastLineColor=76,188,208");
-
-
             }
             return optionQueryString.ToString();
         }
@@ -668,29 +790,7 @@ namespace tankers.distances
         
     }
 
-    public class Port
-    {
-        public string name { get; set; }
-        public string code { get; set; }
-    }
 
-    public class Leg
-    {
-        public Port fromPort { get; set; }
-        public Port toPort { get; set; }
-        public decimal distance { get; set; }
-        public decimal eca_distance { get; set; }
-        public bool start_in_eca { get; set; }
-        public List<WayPoint> WayPointList { get; set;}
-    }
-
-    public class WayPoint
-    {
-        public string name { get; set; }
-        public string routingPointCode { get; set; }
-        public decimal DistanceFromStart { get; set; }
-        public string EcaZoneToPrevious { get; set; }
-    }
 
     
 }

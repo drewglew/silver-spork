@@ -1,22 +1,34 @@
 ﻿using System;
+using System.Collections.Generic;
 
 namespace tankers.distances.models.datawindow
 {
-    public class Route
+    public class Port
     {
-        public String portCode;
-        public String portName;
-        public String routingPoint;
-        public String EcaZone;
-        public Decimal distance;
-        public Decimal eca_distance;
-        public bool eca;
-        public Route()
-        {
-
-
-        }
-
+        public string name { get; set; }
+        public string code { get; set; }
     }
+
+    public class Leg
+    {
+        public Port fromPort { get; set; }
+        public Port toPort { get; set; }
+        public decimal distance { get; set; }
+        public decimal eca_distance { get; set; }
+        public bool start_in_eca { get; set; }
+        public List<WayPoint> WayPointList { get; set; }
+    }
+
+    public class WayPoint
+    {
+        public string name { get; set; }
+        public string routingPointCode { get; set; }
+        public decimal DistanceFromStart { get; set; }
+        public string EcaZoneToPrevious { get; set; }
+    }
+
+
+
+
 }
 
