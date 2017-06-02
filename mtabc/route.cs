@@ -26,4 +26,9 @@ namespace tankers.distances.models.datawindow
         public decimal DistanceFromStart { get; set; }
         public string EcaZoneToPrevious { get; set; }
     }
+
+
+
+
 }
+
