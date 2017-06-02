@@ -9,7 +9,9 @@ using tankers.distances.models.datawindow;
 using tankers.distances.models;
 using System.Collections;
 using System.Web;
+using System.Collections.Specialized;
 
+/* CR4343 */
 namespace tankers.distances
 {
     [ComVisible(true)]
@@ -23,9 +25,9 @@ namespace tankers.distances
         private static XNamespace _wsns;
         private String _apikey;
         private String _voyagestring;
-        private XDocument _routingpointxml;
+        private XDocument _routingpointxml_cached;
         private XDocument _voyagexml;
-        private XDocument _portsxml;
+        private XDocument _portsxml_cached;
         private StringBuilder _rpShortCodesInLeg = new StringBuilder();
         private StringBuilder _rpNamesInLeg = new StringBuilder();
         private StringBuilder _rpOpenByDefaultInLeg = new StringBuilder();
@@ -53,7 +55,7 @@ namespace tankers.distances
             _xmlns = "http://api.atobviaconline.com/v1";
             _wsns = "https://api.atobviaconline.com/v1";
             /* this method does not require api_key */
-            _routingpointxml = _getRoutingPoints();
+            _routingpointxml_cached = _getRoutingPoints();
         }
 
         /// <summary>
@@ -71,6 +73,127 @@ namespace tankers.distances
         {
             _apikey = apikey;
         }
+
+        /// <summary>
+        /// On the settings page, this gets the account details.
+        /// </summary>
+        /// 
+        /// <remarks>
+        /// date created        20170530
+        /// last modified       20170531
+        /// author              AGL027
+        /// </remarks>
+        /// 
+        public String getAccountDetails()
+        {
+            StringBuilder url = new StringBuilder();
+            StringBuilder accountDetails = new StringBuilder("");
+            
+            url.Append(_wsns.ToString()).Append("/AccountDetails?").Append("api_key=" + _apikey);
+
+            abcResponse abcResp = new abcResponse();
+            abcResp = _downloadStringFromURL(url.ToString());
+
+            if (!string.IsNullOrEmpty(abcResp.httpcode))
+            {
+                return abcResp.httpcode;
+            }
+            else
+            {
+                XElement accountElement = XElement.Parse(abcResp.content);
+
+                string version = accountElement.Element(_xmlns + "Version").Value;
+                string licenceexpiry = accountElement.Element(_xmlns + "LicenceExpiry").Value;
+                string remainingdistances = accountElement.Element(_xmlns + "RemainingDistances").Value;
+                
+                accountDetails.Append(version).Append("|").Append(licenceexpiry).Append("|").Append(remainingdistances);
+            }
+
+            return accountDetails.ToString();        
+        }
+
+
+        /// <summary>
+        /// On the settings page, this gets all the routing points used.
+        /// </summary>
+        /// 
+        /// <remarks>
+        /// date created        20170531
+        /// last modified       20170531
+        /// author              AGL027
+        /// </remarks>
+        /// 
+        public String getAllRoutingsForDW()
+        {
+            // we already have routingpointxml data!
+            StringBuilder routingList = new StringBuilder("");
+
+            var routings = from rp in _routingpointxml_cached.Descendants(_xmlns + "RoutingPoint")
+                          select new
+                          {
+                              shortcode = rp.Element(_xmlns + "ShortCode").Value.ToString(),
+                              rpname = rp.Element(_xmlns + "Name").Value.ToString(),
+                              openbydefault = rp.Element(_xmlns + "OpenByDefault").Value.ToString()
+                          };
+
+            foreach (var rp in routings)
+            {
+                routingList.Append(rp.shortcode).Append("\t").Append(rp.rpname).Append("\t");
+                if (rp.openbydefault.ToUpper()=="TRUE")
+                {
+                    routingList.Append("1").Append("\r\n");
+                } else
+                {
+                    routingList.Append("0").Append("\r\n");
+                }
+            }
+            return routingList.ToString();
+        }
+
+
+        /// <summary>
+        /// On the settings page, this gets all the ports used.
+        /// </summary>
+        /// 
+        /// <remarks>
+        /// date created        20170531
+        /// last modified       20170531
+        /// author              AGL027
+        /// </remarks>
+        /// 
+        public String getAllPortsForDW()
+        {
+            
+            StringBuilder portList = new StringBuilder("");
+
+            /* we might not have the port data cached yet*/
+            if (_portsxml_cached == null)
+            {
+                _portsxml_cached = _getPorts();
+            }
+
+            var ports = from p in _portsxml_cached.Descendants(_xmlns + "Port")
+                           select new
+                           {
+                               code = p.Element(_xmlns + "Code").Value.ToString(),
+                               countrycode = p.Element(_xmlns + "CountryCode").Value.ToString(),
+                               portname = p.Element(_xmlns + "Name").Value.ToString(),
+                               lat = p.Element(_xmlns + "LatGeodetic").Value.ToString(),
+                               lon = p.Element(_xmlns + "Lon").Value.ToString()
+                           };
+
+            foreach (var p in ports)
+            {
+                portList.Append(p.code).Append("\t").Append(p.countrycode).Append("\t").Append(p.portname).Append("\t").Append(p.lat).Append("\t").Append(p.lon).Append("\r\n");
+
+            }
+
+            //System.Windows.Forms.MessageBox.Show(portList.ToString());
+
+            return portList.ToString();
+        }
+
+
 
         /// <summary>
         /// low level communication to web service; this is to handle image processing
@@ -163,29 +286,36 @@ namespace tankers.distances
             return abcResp;
         }
 
+
+
         /// <summary>
         /// this method transforms the delimited items received from PowerBuilder and transforms into some sort of querystring segment.
-        /// If method is to obtain the map the ports are transformed into port names.
+        /// If method is to obtain the map the ports are transformed into port names & parm settings linked between the 2 methods are managed here.
         /// </summary>
         /// 
         /// <remarks>
         /// TODO - expand to handle partial routing points?
         /// 
         /// date created        20161205
-        /// last modified       20170119
+        /// last modified       20170530
         /// author              AGL027
         /// </remarks>
         /// <param name="method">possibly could be Image; Voyage</param>
         /// <param name="ports">a delimited list of port codes from Tramos client</param>
         /// <param name="openports">a delimted list of open ports from the Tramos client.  They may or might not include leg index in format SUZ-0|SUZ-1</param>
         /// <param name="closeports">a delimted list of closed ports from the Tramos client.  Optional leg index once again in format DOV-0|DOV-2</param>
-        public String transformToUrl(String method, String ports, String openports, String closeports)
+        /// <param name="scaneca">always scan eca zones and provide data in XML</param>
+        /// <param name="envnavreg">if method is 'voyage' use envnavreg parm name otherwise use showsecazones.  There is link between the map & voyage option </param>
+        /// <param name="antipiracy">if method is 'voyage' use antipiracy parm name otherwise use showpiracyzones.  There is link between the map & voyage option </param>
+        public String transformToUrl(String method, String ports, String openports, String closeports, int scaneca, int envnavreg, int antipiracy)
         {
-            String parturl;
-            String portParms = "";
-            String openParms = "";
-            String closeParms = "";
             String portArg = "";
+
+            StringBuilder portParms = new StringBuilder("");
+            StringBuilder openParms = new StringBuilder("");
+            StringBuilder closeParms = new StringBuilder("");
+            StringBuilder additionalParms = new StringBuilder();
+            StringBuilder parturl = new StringBuilder("");
 
             List<string> portList;
             List<string> openList;
@@ -197,13 +327,14 @@ namespace tankers.distances
 
             bool firstArg = true;
 
+            /* first the ports that direct each leg inside voyage */
             foreach (var port in portList)
             {
                 if (port != "")
                 {
                     if (!firstArg)
                     {
-                        portParms += "&";
+                        portParms.Append("&");
                     }
                     else
                     {
@@ -212,9 +343,9 @@ namespace tankers.distances
 
                     if (method.ToLower() == "image")
                     {
-                        if (_portsxml == null)
+                        if (_portsxml_cached == null)
                         {
-                            _portsxml = _getPorts();
+                            _portsxml_cached = _getPorts();
                         }
                         // obtain nice port name and escape problems chars i.e. <space> 
                         portArg = Uri.EscapeDataString(_getPortName(port));
@@ -223,28 +354,55 @@ namespace tankers.distances
                     {
                         portArg = port;
                     }
-
-                    portParms += "port=" + portArg;
-
+                    portParms.Append("port=").Append(portArg);
                 }
             }
+            /* next the open routing points */
             foreach (var routingpoint in openList)
             {
                 if (routingpoint != "")
                 {
-                    openParms += "&open=" + routingpoint;
+                    openParms.Append("&open=").Append(routingpoint);
                 }
             }
+            /* next the close routing points */
             foreach (var routingpoint in closeList)
             {
                 if (routingpoint != "")
                 {
-                    closeParms += "&close=" + routingpoint;
+                    closeParms.Append("&close=").Append(routingpoint);
                 }
             }
+            /* last part are the additional parms ('scaneca'; 'envnavreg'; 'antipiracy' */
+            if (scaneca == 1)
+            {
+                additionalParms.Append("&scaneca=true");
+            }
+            if (envnavreg == 0)
+            {
+                if (method == "voyage")
+                {
+                    additionalParms.Append("&envnavreg=false");
+                } else if (method == "image")
+                {
+                    additionalParms.Append("&showsecazones=false");
+                }
+            }
+            if (antipiracy == 0)
+            {
+                if (method == "voyage")
+                {
+                    additionalParms.Append("&antipiracy=false");
+                } else if (method == "image")
+                {
+                    additionalParms.Append("&showpiracyzones=false");
+                }
+            }
+            /* concatinate all the parameters needed and pass back to calling process */
+            parturl.Append(portParms).Append(openParms).Append(closeParms).Append(additionalParms);
+            //System.Windows.Forms.MessageBox.Show(parturl.ToString());
 
-            parturl = portParms + openParms + closeParms;
-            return parturl;
+            return parturl.ToString();
         }
 
         /// <summary>
@@ -277,11 +435,43 @@ namespace tankers.distances
             return abcResp.content;
         }
 
+
+        /// <summary>
+        /// direct call to return a simple string containing total distance in voyage
+        /// 
+        /// date created        20161205
+        /// last modified       20161205
+        /// author              AGL027
+        /// </summary>
+        public String getPortToPortDistance(String voyagestring, int journeyId)
+        {
+            StringBuilder url = new StringBuilder();
+            if (voyagestring != _voyagestring)
+            {
+                _voyagestring = voyagestring;
+                url.Append(_wsns.ToString()).Append("/Voyage?").Append(voyagestring).Append("&api_key=" + _apikey);
+                abcResponse abcResp = new abcResponse();
+                abcResp = _downloadStringFromURL(url.ToString());
+                if (!string.IsNullOrEmpty(abcResp.httpcode))
+                {
+                    return "error";
+                }
+                _voyagexml = XDocument.Parse(abcResp.content);
+            }
+
+            var distance = from e in _voyagexml.Descendants(_xmlns + "Leg").Skip(journeyId - 1).Take(1)
+                      select e.Element(_xmlns + "Distance").Value;
+            return Convert.ToString(distance);
+
+        }
+
         /// <summary>
         /// called to transform the calculations stored state.
         /// 
+        /// TODO: include also anti-piracy flag
+        /// 
         /// date created        20170124
-        /// last modified       20170124
+        /// last modified       20170407
         /// author              AGL027
         /// </summary>
         public String getQueryStringFromAbcEngineState(String ports, String abcEngineState, int scanEca)
@@ -296,6 +486,11 @@ namespace tankers.distances
             List<string> closedRoutings = new List<string>();
             List<string> finalRoutings = new List<string>();
             String portParms = "";
+
+            String useEcaZone = "&envnavreg=true";
+            if (scanEca == 0) {
+                useEcaZone = "&envnavreg=false";
+            }
 
             portList = ports.Split('|').ToList();
 
@@ -321,7 +516,7 @@ namespace tankers.distances
             /* so we get all routings without any parms */
             StringBuilder urlRoutings = new StringBuilder();
 
-            urlRoutings.Append(_wsns.ToString()).Append("/Voyage?").Append(portParms).Append("&scaneca=true").Append("&api_key=" + _apikey);
+            urlRoutings.Append(_wsns.ToString()).Append("/Voyage?").Append(portParms).Append(useEcaZone).Append("&api_key=" + _apikey);
             abcResponse abcResp = new abcResponse();
 
             abcResp = _downloadStringFromURL(urlRoutings.ToString());
@@ -360,7 +555,7 @@ namespace tankers.distances
 
             StringBuilder url = new StringBuilder();
             //Now we locate the open routing points
-            url.Append(_wsns.ToString()).Append("/Voyage?").Append(portParms).Append("&routingString=").Append(abcEngineState).Append("&scaneca=true").Append("&api_key=" + _apikey);
+            url.Append(_wsns.ToString()).Append("/Voyage?").Append(portParms).Append("&routingString=").Append(abcEngineState).Append(useEcaZone).Append("&api_key=" + _apikey);
 
             abcResp = _downloadStringFromURL(url.ToString());
             if (!string.IsNullOrEmpty(abcResp.code))
@@ -415,9 +610,9 @@ namespace tankers.distances
 
             string finalRoutingParms = String.Join("&", finalRoutings.ToArray());
 
-            _voyagestring = portParms + "&" + finalRoutingParms + "&scaneca=true";
+            _voyagestring = portParms + "&" + finalRoutingParms + useEcaZone;
 
-            System.Windows.Forms.MessageBox.Show(_routingsForDW.ToString());
+            //System.Windows.Forms.MessageBox.Show(_routingsForDW.ToString());
 
             return _voyagestring.ToString();
         }
@@ -426,165 +621,33 @@ namespace tankers.distances
         /// returns routings data to be received by datawindow
         /// 
         /// date created        20170131
-        /// last modified       20170131
+        /// last modified       20170407
         /// author              AGL027
         /// </summary>
         public String getRoutingsDataForDW()
         {
             return _routingsForDW.ToString();
         }
-
-        /// <summary>
-        /// called to transform the calculations stored state.
-        /// 
-        /// date created        20170124
-        /// last modified       20170124
-        /// author              AGL027
-        /// </summary>
-        public String getQueryStringByEngineState(String ports, String abcEngineState, int scanEca, int returnType)
-        {
-
-
-            String portParms = "";
-
-            List<string> openPortList = new List<string>();
-            List<string> closedPortList = new List<string>();
-            List<string> portList;
-
-            portList = ports.Split('|').ToList();
-
-            bool firstArg = true;
-
-            foreach (var port in portList)
-            {
-                if (port != "")
-                {
-                    if (!firstArg)
-                    {
-                        portParms += "&";
-                    }
-                    else
-                    {
-                        firstArg = false;
-                    }
-                    portParms += "port=" + port;
-
-                }
-            }
-
-
-            /* open routing point parms */
-            var rps = from rp in _routingpointxml.Descendants(_xmlns + "RoutingPoint")
-                      where rp.Element(_xmlns + "OpenByDefault").Value.Contains("true")
-                      select new
-                      {
-                          RoutingPointCode = rp.Element(_xmlns + "ShortCode").Value,
-                      };
-
-            foreach (var rp in rps)
-            {
-                closedPortList.Add("close=" + rp.RoutingPointCode);
-            }
-
-            StringBuilder url = new StringBuilder();
-
-            if (abcEngineState != _voyagestring)
-            {
-
-                url.Append(_wsns.ToString()).Append("/Voyage?").Append(portParms).Append("&routingString=").Append(abcEngineState).Append("&scaneca=true").Append("&api_key=" + _apikey);
-
-                abcResponse abcResp = new abcResponse();
-
-                abcResp = _downloadStringFromURL(url.ToString());
-                if (!string.IsNullOrEmpty(abcResp.code))
-                {
-                    return abcResp.code;
-                }
-                this._voyagexml = XDocument.Parse(abcResp.content);
-
-                _voyagestring = url.ToString();
-
-                abcResp.content = this._voyagexml.ToString();
-
-            }
-            // TODO - here we transform the querystring into somthing reasonable
-
-            if (returnType == (int)dataFormat.voyageString)
-            {
-                var legs = (from e in _voyagexml.Descendants(_xmlns + "Legs").Elements(_xmlns + "Leg")
-                            select new Leg()
-                            {
-
-                                fromPort = e.Elements(_xmlns + "FromPort")
-                                .Select(r => new Port()
-                                {
-                                    name = (string)r.Element(_xmlns + "Name"),
-                                    code = (string)r.Element(_xmlns + "Code")
-
-                                }).FirstOrDefault(),
-
-                                toPort = e.Elements(_xmlns + "ToPort")
-                                .Select(r => new Port()
-                                {
-                                    name = r.Element(_xmlns + "Name") != null ? r.Element(_xmlns + "Name").Value : "",
-                                    code = r.Element(_xmlns + "Code") != null ? r.Element(_xmlns + "Code").Value : "",
-
-                                }).First(),
-
-
-                                WayPointList = e.Element(_xmlns + "Waypoints").Elements(_xmlns + "Waypoint")
-                                .Select(r => new WayPoint()
-                                {
-                                    name = r.Element(_xmlns + "Name") != null ? r.Element(_xmlns + "Name").Value : "",
-                                    routingPointCode = r.Element(_xmlns + "RoutingPoint") != null ? r.Element(_xmlns + "RoutingPoint").Value : "",
-                                }).ToList()
-
-                            }).ToList();
-
-                int legIndex = 0;
-                foreach (Leg leg in legs)
-                {
-
-                    foreach (WayPoint wp in leg.WayPointList)
-                    {
-                        if (wp.routingPointCode != "")
-                        {
-                            openPortList.Add("open=" + wp.routingPointCode + "-" + legIndex.ToString());
-                        }
-                    }
-                    legIndex++;
-                }
-
-                // now close all ports on default travel
-
-                string openPortParms = String.Join("&", openPortList.ToArray());
-                string closedPortParms = String.Join("&", closedPortList.ToArray());
-
-                _voyagestring = portParms + "&" + closedPortParms + "&" + openPortParms + "&scaneca=true";
-
-                return _voyagestring.ToString();
-
-            }
-            return "";
-        }
+        
 
         /// <summary>
         /// called to update the voyage from the client.
         /// 
         /// date created        20161206
-        /// last modified       20170131
+        /// last modified       20170407
         /// author              AGL027
         /// </summary>
         public String getVoyage(String voyagestring, int returnType)
         {
             // might be called from within from one of the overridden methods or potentially directly from Tramos
-
+            
             String content = "";
 
             if (voyagestring != _voyagestring)
             {
                 StringBuilder url = new StringBuilder();
-                url.Append(_wsns.ToString()).Append("/Voyage?").Append(voyagestring).Append("&scaneca=true").Append("&api_key=" + _apikey);
+               
+                url.Append(_wsns.ToString()).Append("/Voyage?").Append(voyagestring).Append("&api_key=" + _apikey);
                 abcResponse abcResp = new abcResponse();
                 abcResp = _downloadStringFromURL(url.ToString());
                 if (!string.IsNullOrEmpty(abcResp.code))
@@ -698,8 +761,6 @@ namespace tankers.distances
                     distancePorttoPort = wp.DistanceFromStart - LastPortDistanceFromStart;
                     sumOfDistancesSinceLastKnown += distancePorttoPort;
 
-
-
                     if (wp.EcaZoneToPrevious != "")
                     {
                         is_eca = 1;
@@ -725,7 +786,7 @@ namespace tankers.distances
                     {
                         if ((wp.name.Length > 4 && wp.name.Substring(0, 5) == "Exit ") || wp.name.IndexOf("Enter ") >= 0)
                         {
-                            wayPointData.Append("").Append("\t").Append(wp.name).Append("\t").Append(sumOfDistancesSinceLastKnown.ToString()).Append("\t").Append(sumOfEcaZoneDistancesSinceLastKnown.ToString()).Append("\t").Append(is_eca).Append("\r\n");
+                            wayPointData.Append("").Append("\tECA:").Append(wp.name).Append("\t").Append(sumOfDistancesSinceLastKnown.ToString()).Append("\t").Append(sumOfEcaZoneDistancesSinceLastKnown.ToString()).Append("\t").Append(is_eca).Append("\r\n");
 
                         }
 
@@ -759,8 +820,10 @@ namespace tankers.distances
         /// Given a single leg & voyage string (querystring) get the routing points inside.  might be called from within from one of the overridden methods or potentially directly from Tramos
         /// TODO - perhaps work a better means to share the name vars of routing points
         /// 
+        /// TODO Possibly better control of the voyagestring and the options 
+        /// 
         /// date created        20161209
-        /// last modified       20170201
+        /// last modified       20170407
         /// author              AGL027
         /// </summary>
         public String getRoutingPointsForSelectedLeg(int journeyId, String voyagestring)
@@ -773,7 +836,9 @@ namespace tankers.distances
 
             if (voyagestring != _voyagestring)
             {
+  
                 String returnCode = this.getVoyage(voyagestring, 0);
+                
                 if (returnCode != "")
                 {
                     return returnCode;
@@ -902,7 +967,7 @@ namespace tankers.distances
         /// </summary>
         private String _getRPName(String rpShortCode)
         {
-            var rpname = (from rp in _routingpointxml.Descendants(_xmlns + "RoutingPoint")
+            var rpname = (from rp in _routingpointxml_cached.Descendants(_xmlns + "RoutingPoint")
                           where rp.Element(_xmlns + "ShortCode").Value.Contains(rpShortCode)
                           select rp.Element(_xmlns + "Name").Value).FirstOrDefault();
 
@@ -918,7 +983,7 @@ namespace tankers.distances
         /// </summary>
         private String _getPortName(String portCode)
         {
-            var portname = (from p in _portsxml.Descendants(_xmlns + "Port")
+            var portname = (from p in _portsxml_cached.Descendants(_xmlns + "Port")
                             where p.Element(_xmlns + "Code").Value.Contains(portCode)
                             select p.Element(_xmlns + "Name").Value).FirstOrDefault();
             return portname;
@@ -933,7 +998,7 @@ namespace tankers.distances
         /// </summary>
         private String _getOpenByDefault(String rpShortCode)
         {
-            var rps = (from rp in _routingpointxml.Descendants(_xmlns + "RoutingPoint")
+            var rps = (from rp in _routingpointxml_cached.Descendants(_xmlns + "RoutingPoint")
                        where rp.Element(_xmlns + "ShortCode").Value.Contains(rpShortCode)
                        select rp.Element(_xmlns + "OpenByDefault").Value).FirstOrDefault();
             return rps;
@@ -973,20 +1038,21 @@ namespace tankers.distances
         /// </summary>
         public string getRoutingDWfromQryStr()
         {
-            System.Windows.Forms.MessageBox.Show("Gets here!");
-
-            _routingsForDW = new StringBuilder("");
-
-            var parmData = HttpUtility.ParseQueryString(this._voyagestring);
-
-            foreach (string open in parmData["open"].Split(','))
-            {
-                _routingsForDW.Append(open).Append("\t").Append(_getRPName(open.Substring(0, 3))).Append("\t").Append("1").Append("\t").Append(_getOpenByDefault(open.Substring(0, 3))).Append("\r\n");
-            }
+            _routingsForDW.Clear();
             
-            foreach (string close in parmData["close"].Split(','))
+            NameValueCollection parmData = HttpUtility.ParseQueryString(this._voyagestring);
+            var items = parmData.AllKeys.SelectMany(parmData.GetValues, (k, v) => new { key = k, value = v });
+
+            foreach (var item in items)
             {
-                _routingsForDW.Append(close).Append("\t").Append(_getRPName(close.Substring(0, 3))).Append("\t").Append("0").Append("\t").Append(_getOpenByDefault(close.Substring(0, 3))).Append("\r\n");
+                if (item.key == "open")
+                {
+                    _routingsForDW.Append(item.value).Append("\t").Append(_getRPName(item.value.Substring(0, 3))).Append("\t").Append("1").Append("\t").Append(_getOpenByDefault(item.value.Substring(0, 3))).Append("\r\n");
+                }
+                else if (item.key == "close")
+                {
+                    _routingsForDW.Append(item.value).Append("\t").Append(_getRPName(item.value.Substring(0, 3))).Append("\t").Append("0").Append("\t").Append(_getOpenByDefault(item.value.Substring(0, 3))).Append("\r\n");
+                }
             }
             return _routingsForDW.ToString();
         }
@@ -1011,7 +1077,7 @@ namespace tankers.distances
                 openByDefaultFlag.Append("true");
             }
 
-            var rps = from rp in _routingpointxml.Descendants(_xmlns + "RoutingPoint")
+            var rps = from rp in _routingpointxml_cached.Descendants(_xmlns + "RoutingPoint")
                       where rp.Element(_xmlns + "OpenByDefault").Value.Contains(openByDefaultFlag.ToString())
                       select new
                       {
@@ -1040,9 +1106,7 @@ namespace tankers.distances
              optionstring.Append(_composeOptionString(options));
              */
             StringBuilder url = new StringBuilder();
-
             url.Append(_wsns.ToString()).Append("/Image?").Append(voyagestring).Append(_composeMapOptionString(mapOptions)).Append("&api_key=" + _apikey);
-
             String errorMessage = "";
 
             byte[] content = _downloadDataFromURL(url.ToString(), ref errorMessage);
@@ -1054,7 +1118,7 @@ namespace tankers.distances
         /// This method is called by the getImage() method to construct the options that can be used when presenting the map image.
         /// 
         /// date created        20161214
-        /// last modified       20161214
+        /// last modified       20170530
         /// author              AGL027
         /// </summary>
         private String _composeMapOptionString(String optionMapString)
@@ -1062,23 +1126,15 @@ namespace tankers.distances
             List<string> mapOptionList;
             StringBuilder optionQueryString = new StringBuilder();
             mapOptionList = optionMapString.Split('|').ToList();
+
+
             if (mapOptionList.Count == 0)
             {
                 return "";
             }
             else
             {
-                /* AtoBviaC default for SECA scanZones is False */
                 if (mapOptionList[0] == "1")
-                {
-                    optionQueryString.Append("&showSecaZones=true");
-                }
-                else
-                {
-                    optionQueryString.Append("&showSecaZones=false");
-                }
-
-                if (mapOptionList[1] == "1")
                 {
                     optionQueryString.Append("&zoom=true");
                 }
@@ -1087,9 +1143,17 @@ namespace tankers.distances
                     optionQueryString.Append("&zoom=false");
                 }
 
-                /* AtoBviaC default for AntiPiracy is True */
+                if (mapOptionList[1] == "1")
+                {
+                    optionQueryString.Append("&showPortLabels=true");
+                }
+                else
+                {
+                    optionQueryString.Append("&showPortLabels=false");
+                }
+                
                 if (mapOptionList[2] != "") optionQueryString.Append("&height=").Append(mapOptionList[2].ToString());
-                /* AtoBviaC default for Environmental/Navigational/Regulatory is True */
+                
                 if (mapOptionList[3] != "") optionQueryString.Append("&width=").Append(mapOptionList[3].ToString());
 
                 // We need to decide if we change default colours
