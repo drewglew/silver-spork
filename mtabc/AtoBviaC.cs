@@ -24,7 +24,7 @@ namespace tankers.distances
         private static XNamespace _xmlns;
         private static XNamespace _wsns;
         private String _apikey;
-        private String _voyagestring;
+        private String _wsparmstring;
         private XDocument _routingpointxml_cached;
         private XDocument _voyagexml;
         private XDocument _portsxml_cached;
@@ -33,12 +33,12 @@ namespace tankers.distances
         private StringBuilder _rpOpenByDefaultInLeg = new StringBuilder();
         private StringBuilder _routingsForDW = new StringBuilder("");
 
-        enum dataFormat
+        enum DataFormat
         {
             None,
             XML,
             PBDataWindowSyntax,
-            voyageString
+            wsParmString
         };
 
         /// <summary>
@@ -69,7 +69,7 @@ namespace tankers.distances
         /// </remarks>
         /// 
         /// <param name="apikey">api_key must be stored in client application.</param> 
-        public void setApiKey(String apikey)
+        public void SetApiKey(String apikey)
         {
             _apikey = apikey;
         }
@@ -84,7 +84,7 @@ namespace tankers.distances
         /// author              AGL027
         /// </remarks>
         /// 
-        public String getAccountDetails()
+        public String GetAccountDetails()
         {
             StringBuilder url = new StringBuilder();
             StringBuilder accountDetails = new StringBuilder("");
@@ -123,7 +123,7 @@ namespace tankers.distances
         /// author              AGL027
         /// </remarks>
         /// 
-        public String getAllRoutingsForDW()
+        public String GetAllRoutingsForDW()
         {
             // we already have routingpointxml data!
             StringBuilder routingList = new StringBuilder("");
@@ -161,7 +161,7 @@ namespace tankers.distances
         /// author              AGL027
         /// </remarks>
         /// 
-        public String getAllPortsForDW()
+        public String GetAllPortsForDW()
         {
             
             StringBuilder portList = new StringBuilder("");
@@ -297,33 +297,41 @@ namespace tankers.distances
         /// TODO - expand to handle partial routing points?
         /// 
         /// date created        20161205
-        /// last modified       20170530
+        /// last modified       20171016
         /// author              AGL027
         /// </remarks>
         /// <param name="method">possibly could be Image; Voyage</param>
         /// <param name="ports">a delimited list of port codes from Tramos client</param>
-        /// <param name="openports">a delimted list of open ports from the Tramos client.  They may or might not include leg index in format SUZ-0|SUZ-1</param>
-        /// <param name="closeports">a delimted list of closed ports from the Tramos client.  Optional leg index once again in format DOV-0|DOV-2</param>
+        /// <param name="open_default"></param>
+        /// <param name="close_default"></param>
+        /// <param name="open_leglevel">a delimted list of open ports from the Tramos client.  They may or might not include leg index in format SUZ-0|SUZ-1</param>
+        /// <param name="close_leglevel">a delimted list of closed ports from the Tramos client.  Optional leg index once again in format DOV-0|DOV-2</param>
         /// <param name="scaneca">always scan eca zones and provide data in XML</param>
         /// <param name="envnavreg">if method is 'voyage' use envnavreg parm name otherwise use showsecazones.  There is link between the map & voyage option </param>
         /// <param name="antipiracy">if method is 'voyage' use antipiracy parm name otherwise use showpiracyzones.  There is link between the map & voyage option </param>
-        public String transformToUrl(String method, String ports, String openports, String closeports, int scaneca, int envnavreg, int antipiracy)
+        public String TransformToUrl(String method, String ports, String open_default, String close_default, String open_leglevel, String close_leglevel, int scaneca, int envnavreg, int antipiracy)
         {
             String portArg = "";
 
             StringBuilder portParms = new StringBuilder("");
             StringBuilder openParms = new StringBuilder("");
             StringBuilder closeParms = new StringBuilder("");
+            StringBuilder openDefaultParms = new StringBuilder("");
+            StringBuilder closeDefaultParms = new StringBuilder("");
             StringBuilder additionalParms = new StringBuilder();
             StringBuilder parturl = new StringBuilder("");
 
             List<string> portList;
+            List<string> openDefaultList;
+            List<string> closeDefaultList;
             List<string> openList;
             List<string> closeList;
 
             portList = ports.Split('|').ToList();
-            openList = openports.Split('|').ToList();
-            closeList = closeports.Split('|').ToList();
+            openDefaultList = open_default.Split('|').ToList();
+            closeDefaultList = close_default.Split('|').ToList();
+            openList = open_leglevel.Split('|').ToList();
+            closeList = close_leglevel.Split('|').ToList();
 
             bool firstArg = true;
 
@@ -357,6 +365,25 @@ namespace tankers.distances
                     portParms.Append("port=").Append(portArg);
                 }
             }
+
+            /* next the open default routing points */
+            foreach (var routingpoint in openDefaultList)
+            {
+                if (routingpoint != "")
+                {
+                    openDefaultParms.Append("&open=").Append(routingpoint);
+                }
+            }
+            /* next the close default routing points */
+            foreach (var routingpoint in closeDefaultList)
+            {
+                if (routingpoint != "")
+                {
+                    closeDefaultParms.Append("&close=").Append(routingpoint);
+                }
+            }
+            
+
             /* next the open routing points */
             foreach (var routingpoint in openList)
             {
@@ -385,7 +412,7 @@ namespace tankers.distances
                     additionalParms.Append("&envnavreg=false");
                 } else if (method == "image")
                 {
-                    additionalParms.Append("&showsecazones=false");
+                    additionalParms.Append("&showsecazones=false&envnavreg=false");
                 }
             }
             if (antipiracy == 0)
@@ -395,11 +422,16 @@ namespace tankers.distances
                     additionalParms.Append("&antipiracy=false");
                 } else if (method == "image")
                 {
-                    additionalParms.Append("&showpiracyzones=false");
+                    additionalParms.Append("&showpiracyzones=false&antipiracy=false");
                 }
             }
+
+            /* new item since 20171016 */
+            additionalParms.Append("&waypointResolution=detailed-high");
+
+
             /* concatinate all the parameters needed and pass back to calling process */
-            parturl.Append(portParms).Append(openParms).Append(closeParms).Append(additionalParms);
+            parturl.Append(portParms).Append(openDefaultParms).Append(closeDefaultParms).Append(openParms).Append(closeParms).Append(additionalParms);
             //System.Windows.Forms.MessageBox.Show(parturl.ToString());
 
             return parturl.ToString();
@@ -412,14 +444,14 @@ namespace tankers.distances
         /// last modified       20161205
         /// author              AGL027
         /// </summary>
-        public String getDistance(String voyagestring)
+        public String GetDistance(String wsParmString)
         {
 
             StringBuilder url = new StringBuilder();
             // might be called from within from one of the overridden methods or potentially directly from Tramos
-            //_voyagestring = voyagestring;
+            //_wsparmstring = wsParmString;
 
-            url.Append(_wsns.ToString()).Append("/Distance?").Append(voyagestring).Append("&api_key=" + _apikey);
+            url.Append(_wsns.ToString()).Append("/Distance?").Append(wsParmString).Append("&api_key=" + _apikey);
 
             abcResponse abcResp = new abcResponse();
             abcResp = _downloadStringFromURL(url.ToString());
@@ -430,7 +462,7 @@ namespace tankers.distances
             }
             else
             {
-                // _voyagestring = _createNewQryStr(content);
+                // _wsparmstring = _createNewQryStr(content);
             }
             return abcResp.content;
         }
@@ -440,16 +472,16 @@ namespace tankers.distances
         /// direct call to return a simple string containing total distance in voyage
         /// 
         /// date created        20161205
-        /// last modified       20161205
+        /// last modified       20170912
         /// author              AGL027
         /// </summary>
-        public String getPortToPortDistance(String voyagestring, int journeyId)
+        public String GetPortToPortDistance(String wsParmString, int journeyId)
         {
             StringBuilder url = new StringBuilder();
-            if (voyagestring != _voyagestring)
+            if (wsParmString != _wsparmstring)
             {
-                _voyagestring = voyagestring;
-                url.Append(_wsns.ToString()).Append("/Voyage?").Append(voyagestring).Append("&api_key=" + _apikey);
+                _wsparmstring = wsParmString;
+                url.Append(_wsns.ToString()).Append("/Voyage?").Append(wsParmString).Append("&api_key=" + _apikey);
                 abcResponse abcResp = new abcResponse();
                 abcResp = _downloadStringFromURL(url.ToString());
                 if (!string.IsNullOrEmpty(abcResp.httpcode))
@@ -474,7 +506,7 @@ namespace tankers.distances
         /// last modified       20170407
         /// author              AGL027
         /// </summary>
-        public String getQueryStringFromAbcEngineState(String ports, String abcEngineState, int scanEca)
+        public String GetQueryStringFromAbcEngineState(String ports, String abcEngineState, int scanEca)
         {
             // the plan is to use just the string and the ports to obtain existing items on a leg level, possibly set these as closed.
             // then obtain the open ports by using the full query. replacing or adding new items to list accordingly
@@ -515,8 +547,8 @@ namespace tankers.distances
 
             /* so we get all routings without any parms */
             StringBuilder urlRoutings = new StringBuilder();
-
-            urlRoutings.Append(_wsns.ToString()).Append("/Voyage?").Append(portParms).Append(useEcaZone).Append("&api_key=" + _apikey);
+            
+            urlRoutings.Append(_wsns.ToString()).Append("/Voyage?").Append(portParms).Append("&waypointResolution=detailed-high").Append(useEcaZone).Append("&api_key=" + _apikey);
             abcResponse abcResp = new abcResponse();
 
             abcResp = _downloadStringFromURL(urlRoutings.ToString());
@@ -555,7 +587,7 @@ namespace tankers.distances
 
             StringBuilder url = new StringBuilder();
             //Now we locate the open routing points
-            url.Append(_wsns.ToString()).Append("/Voyage?").Append(portParms).Append("&routingString=").Append(abcEngineState).Append(useEcaZone).Append("&api_key=" + _apikey);
+            url.Append(_wsns.ToString()).Append("/Voyage?").Append(portParms).Append("&waypointResolution=detailed-high").Append("&routingString=").Append(abcEngineState).Append(useEcaZone).Append("&api_key=" + _apikey);
 
             abcResp = _downloadStringFromURL(url.ToString());
             if (!string.IsNullOrEmpty(abcResp.code))
@@ -610,21 +642,21 @@ namespace tankers.distances
 
             string finalRoutingParms = String.Join("&", finalRoutings.ToArray());
 
-            _voyagestring = portParms + "&" + finalRoutingParms + useEcaZone;
+            _wsparmstring = portParms + "&" + finalRoutingParms + useEcaZone;
 
             //System.Windows.Forms.MessageBox.Show(_routingsForDW.ToString());
 
-            return _voyagestring.ToString();
+            return _wsparmstring.ToString();
         }
 
         /// <summary>
         /// returns routings data to be received by datawindow
         /// 
         /// date created        20170131
-        /// last modified       20170407
+        /// last modified       20170912
         /// author              AGL027
         /// </summary>
-        public String getRoutingsDataForDW()
+        public String GetRoutingDWFromEngineState()
         {
             return _routingsForDW.ToString();
         }
@@ -637,24 +669,24 @@ namespace tankers.distances
         /// last modified       20170407
         /// author              AGL027
         /// </summary>
-        public String getVoyage(String voyagestring, int returnType)
+        public String GetVoyage(String wsParmString, int returnType)
         {
             // might be called from within from one of the overridden methods or potentially directly from Tramos
             
             String content = "";
 
-            if (voyagestring != _voyagestring)
+            if (wsParmString != _wsparmstring)
             {
                 StringBuilder url = new StringBuilder();
                
-                url.Append(_wsns.ToString()).Append("/Voyage?").Append(voyagestring).Append("&api_key=" + _apikey);
+                url.Append(_wsns.ToString()).Append("/Voyage?").Append("&waypointResolution=detailed-high").Append(wsParmString).Append("&api_key=" + _apikey);
                 abcResponse abcResp = new abcResponse();
                 abcResp = _downloadStringFromURL(url.ToString());
                 if (!string.IsNullOrEmpty(abcResp.code))
                 {
                     return abcResp.code;
                 }
-                _voyagestring = voyagestring;
+                _wsparmstring = wsParmString;
                 this._voyagexml = XDocument.Parse(abcResp.content);
             }
             else
@@ -662,11 +694,11 @@ namespace tankers.distances
                 content = this._voyagexml.ToString();
             }
 
-            if (returnType == (int)dataFormat.XML)
+            if (returnType == (int)DataFormat.XML)
             {
                 return content;
             }
-            else if (returnType == (int)dataFormat.PBDataWindowSyntax)
+            else if (returnType == (int)DataFormat.PBDataWindowSyntax)
             {
 
                 /* construct data that will be loaded into the calling datawindow */
@@ -677,13 +709,13 @@ namespace tankers.distances
                 return dwContent.ToString();
 
             }
-            else if (returnType == (int)dataFormat.None)
+            else if (returnType == (int)DataFormat.None)
             {
                 return "";
             }
-            else if (returnType == (int)dataFormat.voyageString)
+            else if (returnType == (int)DataFormat.wsParmString)
             {
-                return _voyagestring;
+                return _wsparmstring;
             }
             return "error, unhandled";
         }
@@ -820,13 +852,13 @@ namespace tankers.distances
         /// Given a single leg & voyage string (querystring) get the routing points inside.  might be called from within from one of the overridden methods or potentially directly from Tramos
         /// TODO - perhaps work a better means to share the name vars of routing points
         /// 
-        /// TODO Possibly better control of the voyagestring and the options 
+        /// TODO Possibly better control of the wsparmstring and the options 
         /// 
         /// date created        20161209
         /// last modified       20170407
         /// author              AGL027
         /// </summary>
-        public String getRoutingPointsForSelectedLeg(int journeyId, String voyagestring)
+        public String GetRoutingPointsForSelectedLeg(int journeyId, String wsParmString)
         {
             _rpShortCodesInLeg.Clear();
             _rpNamesInLeg.Clear();
@@ -834,10 +866,10 @@ namespace tankers.distances
 
             _routingsForDW = new StringBuilder("");
 
-            if (voyagestring != _voyagestring)
+            if (wsParmString != _wsparmstring)
             {
   
-                String returnCode = this.getVoyage(voyagestring, 0);
+                String returnCode = this.GetVoyage(wsParmString, 0);
                 
                 if (returnCode != "")
                 {
@@ -866,11 +898,13 @@ namespace tankers.distances
         /// <summary>
         /// Obtain single delimited collection of routing point names inside a string
         /// 
+        /// OBSOLETE
+        /// 
         /// date created        ??????
         /// last modified       ??????
         /// author              AGL027
         /// </summary>
-        public String getRPNamesInsideLeg()
+        public String GetRPNamesInsideLeg()
         {
             return _rpNamesInLeg.ToString();
         }
@@ -882,7 +916,7 @@ namespace tankers.distances
         /// last modified       ??????
         /// author              AGL027
         /// </summary>
-        public String getRPShortCodesInsideLeg()
+        public String GetRPShortCodesInsideLeg()
         {
             return _rpShortCodesInLeg.ToString();
         }
@@ -890,11 +924,13 @@ namespace tankers.distances
         /// <summary>
         /// Obtain single delimited collection of routing point short codes that are open inside a string
         /// 
+        /// OBSOLETE
+        /// 
         /// date created        ??????
         /// last modified       ??????
         /// author              AGL027
         /// </summary>
-        public String getRPOpenByDefaultInsideLeg()
+        public String GetRPOpenByDefaultInsideLeg()
         {
             return _rpOpenByDefaultInLeg.ToString();
         }
@@ -1011,10 +1047,10 @@ namespace tankers.distances
         /// last modified       20170131
         /// author              AGL027
         /// </summary>
-        public string getRPfromQueryStringInLeg(int journeyId, String rpType)
+        public string GetRPfromQueryStringInLeg(int journeyId, String rpType)
         {
 
-            var parmData = HttpUtility.ParseQueryString(this._voyagestring).Get(rpType.ToLower());
+            var parmData = HttpUtility.ParseQueryString(this._wsparmstring).Get(rpType.ToLower());
             StringBuilder returnVal = new StringBuilder("");
 
             _rpShortCodesInLeg.Clear();
@@ -1033,14 +1069,14 @@ namespace tankers.distances
         /// This method is designed to extract the routing data found within the querystring
         /// 
         /// date created        20170206
-        /// last modified       20170206
+        /// last modified       20170912
         /// author              AGL027
         /// </summary>
-        public string getRoutingDWfromQryStr()
+        public string GetRoutingDWfromWSParm()
         {
             _routingsForDW.Clear();
             
-            NameValueCollection parmData = HttpUtility.ParseQueryString(this._voyagestring);
+            NameValueCollection parmData = HttpUtility.ParseQueryString(this._wsparmstring);
             var items = parmData.AllKeys.SelectMany(parmData.GetValues, (k, v) => new { key = k, value = v });
 
             foreach (var item in items)
@@ -1064,7 +1100,7 @@ namespace tankers.distances
         /// last modified       20161208
         /// author              AGL027
         /// </summary>
-        public String getRPbyType(int rpType, String queryParm)
+        public String GetRPbyType(int rpType, String queryParm)
         {
             StringBuilder openByDefaultFlag = new StringBuilder();
 
@@ -1100,13 +1136,13 @@ namespace tankers.distances
         /// last modified       20161214
         /// author              AGL027
         /// </summary>
-        public byte[] getImage(String voyagestring, String mapOptions)
+        public byte[] GetImage(String wsParmString, String mapOptions)
         {
             /* StringBuilder optionstring = new StringBuilder();
              optionstring.Append(_composeOptionString(options));
              */
             StringBuilder url = new StringBuilder();
-            url.Append(_wsns.ToString()).Append("/Image?").Append(voyagestring).Append(_composeMapOptionString(mapOptions)).Append("&api_key=" + _apikey);
+            url.Append(_wsns.ToString()).Append("/Image?").Append(wsParmString).Append(_composeMapOptionString(mapOptions)).Append("&api_key=" + _apikey);
             String errorMessage = "";
 
             byte[] content = _downloadDataFromURL(url.ToString(), ref errorMessage);
@@ -1114,11 +1150,149 @@ namespace tankers.distances
             return content;
         }
 
+
+        /// <summary>
+        /// This method with public scope is called by consumer to obtain the map image.  It requires assistance from both  _composeMapOptionString() and _downloadDataFromURL()
+        /// 
+        /// date created        20171016
+        /// last modified       20171018
+        /// author              AGL027
+        /// </summary>
+        public string GetLeafletHTMLSource(String wsParmString, int mapHeight)
+        {
+            StringBuilder sHtmlSource = new StringBuilder("");
+
+            sHtmlSource.Append(@"
+<html>
+<head>
+    <meta http-equiv='X-UA-Compatible' content='IE = Edge'/>
+   <title>AtoBviaC Map with Leaflet</title>
+   <link rel='stylesheet' href='leaflet/leaflet.css'/>
+   <!--[if lte IE 8]><link rel = 'stylesheet' href = 'leaflet/leaflet.ie.css'/><![endif]-->
+       <script src = 'leaflet/leaflet.js' ></script>
+         <meta charset = 'utf-8'>
+            <meta name = 'viewport' content = 'width =device-width, initial-scale=1.0' >
+            <link href = 'docs /images/favicon.ico' rel = 'shortcut icon' type = 'image/x-icon' >
+            <link href = 'https://unpkg.com/leaflet@1.2.0/dist/leaflet.css' rel = 'stylesheet' crossorigin = '' integrity = 'sha512-M2wvCLH6DSRazYeZRIm1JnYyh22purTM+FDB5CsyxtQJYeKq83arPe5wgbNmcFXGqiSH2XR8dT/fJISVA1r/zQ=='>
+                    <script src = 'https://unpkg.com/leaflet@1.2.0/dist/leaflet.js' crossorigin = '' integrity = 'sha512-lInM/apFSqyy1o6s89K4iQUKg6ppXEgsVxT35HbzUupEVRh2Eu9Wdl4tHj7dZO0s1uvplcYGmt3498TtHq+log=='></script >
+                        <script language = 'javascript'>
+                        function init() {
+            var map = new L.Map('map', {
+            	zoomControl: false
+		    });                       
+                
+      	 	L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+	            maxZoom: 18,
+	            attribution: '&copy; <a href=""http://www.openstreetmap.org/copyright"">OpenStreetMap</a>'
+            }).addTo(map);
+
+            L.tileLayer('https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png', {
+	            maxZoom: 18,
+	            attribution: 'Map data: &copy; <a href=""http://www.openseamap.org"">OpenSeaMap</a> contributors'
+            }).addTo(map);
+
+            map.attributionControl.setPrefix(''); // Don't show the 'Powered by Leaflet' text.");
+            
+            int countOfLegs = (int)_voyagexml.Descendants(_xmlns + "Leg").Count();
+
+            StringBuilder polylinePoint = new StringBuilder(@"
+            //Define an array of Latlng objects (points along the line)
+            var polylinePoints = [");
+            StringBuilder popupDetail = new StringBuilder();
+
+            var legs = (from e in _voyagexml.Descendants(_xmlns + "Legs").Elements(_xmlns + "Leg")
+                        select new Leg()
+                        {
+                            
+                            fromPort = e.Elements(_xmlns + "FromPort")
+                            .Select(r => new Port()
+                            {
+                                name = (string)r.Element(_xmlns + "Name"),
+                                code = (string)r.Element(_xmlns + "Code")
+
+                            }).FirstOrDefault(),
+
+                            toPort = e.Elements(_xmlns + "ToPort")
+                            .Select(r => new Port()
+                            {
+                                name = r.Element(_xmlns + "Name") != null ? r.Element(_xmlns + "Name").Value : "",
+                                code = r.Element(_xmlns + "Code") != null ? r.Element(_xmlns + "Code").Value : "",
+
+                            }).First(),
+                            
+
+                            WayPointList = e.Element(_xmlns + "Waypoints").Elements(_xmlns + "Waypoint")
+                            .Select(r => new WayPoint()
+                            {
+                                name = r.Element(_xmlns + "Name") != null ? r.Element(_xmlns + "Name").Value : "",
+                                DistanceFromStart = Convert.ToDecimal(r.Element(_xmlns + "DistanceFromStart").Value),
+                                routingPointCode = r.Element(_xmlns + "RoutingPoint") != null ? r.Element(_xmlns + "RoutingPoint").Value : "",
+                                EcaZoneToPrevious = r.Element(_xmlns + "EcaZoneToPrevious") != null ? r.Element(_xmlns + "EcaZoneToPrevious").Value : "",
+                                LatGeodetic = Convert.ToDecimal(r.Element(_xmlns + "LatGeodetic").Value),
+                                Lon = Convert.ToDecimal(r.Element(_xmlns + "Lon").Value)
+                            }).ToList()
+
+                        }).ToList();
+            foreach (Leg leg in legs)
+            {
+                foreach (WayPoint wp in leg.WayPointList)
+                {
+                    if (wp.name!=null && wp.name!="")
+                    {
+                        popupDetail.Append(@"
+                            L.marker([").Append(wp.LatGeodetic.ToString()).Append(",").Append(wp.Lon.ToString()).Append(@"]).addTo(map)
+                            .bindPopup('<b>").Append(wp.name).Append("</b><br/>Lat:").Append(String.Format("{0:0.00}", wp.LatGeodetic)).Append(", Lon:").Append(String.Format("{0:0.00}", wp.Lon)).Append(@"')
+                            .openPopup();
+                        ");
+
+                    }
+
+                    polylinePoint.Append("new L.LatLng(").Append(wp.LatGeodetic.ToString()).Append(",").Append(wp.Lon.ToString()).Append("),");
+                }
+            }
+            sHtmlSource.Append(popupDetail);
+
+            sHtmlSource.Append(polylinePoint);
+
+            sHtmlSource.Append(@"];
+         
+         var polylineOptions = {
+               color: 'green',
+               weight: 3,
+               opacity: 0.9
+             };
+
+         var polyline = new L.Polyline(polylinePoints, polylineOptions);
+
+         map.addLayer(polyline);                        
+
+         // zoom the map to the polyline
+         map.fitBounds(polyline.getBounds());
+
+		//add zoom control with your options
+		L.control.zoom({
+			 position:'topright'
+		}).addTo(map);
+      }
+    </script>
+    </head>
+    <body onLoad='javascript: init(); '>
+        <div id = 'map' style = 'height: ").Append(mapHeight.ToString()).Append(@"px' ></div>
+    </body>
+</html>
+     ");
+            return sHtmlSource.ToString();
+        }
+
+
+
+
+
         /// <summary>
         /// This method is called by the getImage() method to construct the options that can be used when presenting the map image.
         /// 
         /// date created        20161214
-        /// last modified       20170530
+        /// last modified       20170912
         /// author              AGL027
         /// </summary>
         private String _composeMapOptionString(String optionMapString)
@@ -1152,11 +1326,22 @@ namespace tankers.distances
                     optionQueryString.Append("&showPortLabels=false");
                 }
                 
+                /* map height */
                 if (mapOptionList[2] != "") optionQueryString.Append("&height=").Append(mapOptionList[2].ToString());
-                
+                /* map width */
                 if (mapOptionList[3] != "") optionQueryString.Append("&width=").Append(mapOptionList[3].ToString());
+                /* port label font color  */
+                if (mapOptionList[4] != "") optionQueryString.Append("&portLabelColor=").Append(mapOptionList[4].ToString());
+                /* port label font size */
+                if (mapOptionList[5] != "") optionQueryString.Append("&portLabelFontSize=").Append(mapOptionList[5].ToString());
+                /* coastline background color  */
+                if (mapOptionList[6] != "") optionQueryString.Append("&coastlineColor=").Append(mapOptionList[6].ToString());
+                /* land background color  */
+                if (mapOptionList[7] != "") optionQueryString.Append("&landColor=").Append(mapOptionList[7].ToString());
+                /* sea background color  */
+                if (mapOptionList[8] != "") optionQueryString.Append("&seaColor=").Append(mapOptionList[8].ToString());
 
-                // We need to decide if we change default colours
+                // We decide to change default colours
                 // optionQueryString.Append("&landcolor=35,73,88&coastLineColor=76,188,208");
             }
             return optionQueryString.ToString();

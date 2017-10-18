@@ -25,6 +25,8 @@ namespace tankers.distances.models.datawindow
         public string routingPointCode { get; set; }
         public decimal DistanceFromStart { get; set; }
         public string EcaZoneToPrevious { get; set; }
+        public decimal LatGeodetic { get; set; }
+        public decimal Lon { get; set; }
     }
 
 
