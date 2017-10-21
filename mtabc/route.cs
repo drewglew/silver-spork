@@ -7,6 +7,8 @@ namespace tankers.distances.models.datawindow
     {
         public string name { get; set; }
         public string code { get; set; }
+        public string LatGeodetic { get; set; }
+        public string Lon { get; set; }
     }
 
     public class Leg
@@ -25,8 +27,8 @@ namespace tankers.distances.models.datawindow
         public string routingPointCode { get; set; }
         public decimal DistanceFromStart { get; set; }
         public string EcaZoneToPrevious { get; set; }
-        public decimal LatGeodetic { get; set; }
-        public decimal Lon { get; set; }
+        public string LatGeodetic { get; set; }
+        public string Lon { get; set; }
     }
 
 

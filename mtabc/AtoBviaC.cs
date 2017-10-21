@@ -18,6 +18,9 @@ namespace tankers.distances
     [ClassInterface(ClassInterfaceType.AutoDual)]
     [ProgId("mt.distances.AtoBviaC")]
 
+    
+
+
     /* created 20161205 */
     public class AtoBviaC
     {
@@ -26,7 +29,7 @@ namespace tankers.distances
         private String _apikey;
         private String _wsparmstring;
         private XDocument _routingpointxml_cached;
-        private XDocument _voyagexml;
+        public XDocument _voyagexml;
         private XDocument _portsxml_cached;
         private StringBuilder _rpShortCodesInLeg = new StringBuilder();
         private StringBuilder _rpNamesInLeg = new StringBuilder();
@@ -88,7 +91,7 @@ namespace tankers.distances
         {
             StringBuilder url = new StringBuilder();
             StringBuilder accountDetails = new StringBuilder("");
-            
+
             url.Append(_wsns.ToString()).Append("/AccountDetails?").Append("api_key=" + _apikey);
 
             abcResponse abcResp = new abcResponse();
@@ -105,11 +108,11 @@ namespace tankers.distances
                 string version = accountElement.Element(_xmlns + "Version").Value;
                 string licenceexpiry = accountElement.Element(_xmlns + "LicenceExpiry").Value;
                 string remainingdistances = accountElement.Element(_xmlns + "RemainingDistances").Value;
-                
+
                 accountDetails.Append(version).Append("|").Append(licenceexpiry).Append("|").Append(remainingdistances);
             }
 
-            return accountDetails.ToString();        
+            return accountDetails.ToString();
         }
 
 
@@ -129,20 +132,21 @@ namespace tankers.distances
             StringBuilder routingList = new StringBuilder("");
 
             var routings = from rp in _routingpointxml_cached.Descendants(_xmlns + "RoutingPoint")
-                          select new
-                          {
-                              shortcode = rp.Element(_xmlns + "ShortCode").Value.ToString(),
-                              rpname = rp.Element(_xmlns + "Name").Value.ToString(),
-                              openbydefault = rp.Element(_xmlns + "OpenByDefault").Value.ToString()
-                          };
+                           select new
+                           {
+                               shortcode = rp.Element(_xmlns + "ShortCode").Value.ToString(),
+                               rpname = rp.Element(_xmlns + "Name").Value.ToString(),
+                               openbydefault = rp.Element(_xmlns + "OpenByDefault").Value.ToString()
+                           };
 
             foreach (var rp in routings)
             {
                 routingList.Append(rp.shortcode).Append("\t").Append(rp.rpname).Append("\t");
-                if (rp.openbydefault.ToUpper()=="TRUE")
+                if (rp.openbydefault.ToUpper() == "TRUE")
                 {
                     routingList.Append("1").Append("\r\n");
-                } else
+                }
+                else
                 {
                     routingList.Append("0").Append("\r\n");
                 }
@@ -163,7 +167,7 @@ namespace tankers.distances
         /// 
         public String GetAllPortsForDW()
         {
-            
+
             StringBuilder portList = new StringBuilder("");
 
             /* we might not have the port data cached yet*/
@@ -173,14 +177,14 @@ namespace tankers.distances
             }
 
             var ports = from p in _portsxml_cached.Descendants(_xmlns + "Port")
-                           select new
-                           {
-                               code = p.Element(_xmlns + "Code").Value.ToString(),
-                               countrycode = p.Element(_xmlns + "CountryCode").Value.ToString(),
-                               portname = p.Element(_xmlns + "Name").Value.ToString(),
-                               lat = p.Element(_xmlns + "LatGeodetic").Value.ToString(),
-                               lon = p.Element(_xmlns + "Lon").Value.ToString()
-                           };
+                        select new
+                        {
+                            code = p.Element(_xmlns + "Code").Value.ToString(),
+                            countrycode = p.Element(_xmlns + "CountryCode").Value.ToString(),
+                            portname = p.Element(_xmlns + "Name").Value.ToString(),
+                            lat = p.Element(_xmlns + "LatGeodetic").Value.ToString(),
+                            lon = p.Element(_xmlns + "Lon").Value.ToString()
+                        };
 
             foreach (var p in ports)
             {
@@ -382,7 +386,7 @@ namespace tankers.distances
                     closeDefaultParms.Append("&close=").Append(routingpoint);
                 }
             }
-            
+
 
             /* next the open routing points */
             foreach (var routingpoint in openList)
@@ -410,7 +414,8 @@ namespace tankers.distances
                 if (method == "voyage")
                 {
                     additionalParms.Append("&envnavreg=false");
-                } else if (method == "image")
+                }
+                else if (method == "image")
                 {
                     additionalParms.Append("&showsecazones=false&envnavreg=false");
                 }
@@ -420,7 +425,8 @@ namespace tankers.distances
                 if (method == "voyage")
                 {
                     additionalParms.Append("&antipiracy=false");
-                } else if (method == "image")
+                }
+                else if (method == "image")
                 {
                     additionalParms.Append("&showpiracyzones=false&antipiracy=false");
                 }
@@ -492,7 +498,7 @@ namespace tankers.distances
             }
 
             var distance = from e in _voyagexml.Descendants(_xmlns + "Leg").Skip(journeyId - 1).Take(1)
-                      select e.Element(_xmlns + "Distance").Value;
+                           select e.Element(_xmlns + "Distance").Value;
             return Convert.ToString(distance);
 
         }
@@ -520,7 +526,8 @@ namespace tankers.distances
             String portParms = "";
 
             String useEcaZone = "&envnavreg=true";
-            if (scanEca == 0) {
+            if (scanEca == 0)
+            {
                 useEcaZone = "&envnavreg=false";
             }
 
@@ -547,7 +554,7 @@ namespace tankers.distances
 
             /* so we get all routings without any parms */
             StringBuilder urlRoutings = new StringBuilder();
-            
+
             urlRoutings.Append(_wsns.ToString()).Append("/Voyage?").Append(portParms).Append("&waypointResolution=detailed-high").Append(useEcaZone).Append("&api_key=" + _apikey);
             abcResponse abcResp = new abcResponse();
 
@@ -660,7 +667,7 @@ namespace tankers.distances
         {
             return _routingsForDW.ToString();
         }
-        
+
 
         /// <summary>
         /// called to update the voyage from the client.
@@ -672,15 +679,18 @@ namespace tankers.distances
         public String GetVoyage(String wsParmString, int returnType)
         {
             // might be called from within from one of the overridden methods or potentially directly from Tramos
-            
+
             String content = "";
+
+
 
             if (wsParmString != _wsparmstring)
             {
                 StringBuilder url = new StringBuilder();
-               
-                url.Append(_wsns.ToString()).Append("/Voyage?").Append("&waypointResolution=detailed-high").Append(wsParmString).Append("&api_key=" + _apikey);
+
+                url.Append(_wsns.ToString()).Append("/Voyage?").Append(wsParmString).Append("&waypointResolution=detailed-high").Append("&api_key=" + _apikey);
                 abcResponse abcResp = new abcResponse();
+
                 abcResp = _downloadStringFromURL(url.ToString());
                 if (!string.IsNullOrEmpty(abcResp.code))
                 {
@@ -868,9 +878,9 @@ namespace tankers.distances
 
             if (wsParmString != _wsparmstring)
             {
-  
+
                 String returnCode = this.GetVoyage(wsParmString, 0);
-                
+
                 if (returnCode != "")
                 {
                     return returnCode;
@@ -1075,7 +1085,7 @@ namespace tankers.distances
         public string GetRoutingDWfromWSParm()
         {
             _routingsForDW.Clear();
-            
+
             NameValueCollection parmData = HttpUtility.ParseQueryString(this._wsparmstring);
             var items = parmData.AllKeys.SelectMany(parmData.GetValues, (k, v) => new { key = k, value = v });
 
@@ -1192,7 +1202,7 @@ namespace tankers.distances
             }).addTo(map);
 
             map.attributionControl.setPrefix(''); // Don't show the 'Powered by Leaflet' text.");
-            
+
             int countOfLegs = (int)_voyagexml.Descendants(_xmlns + "Leg").Count();
 
             StringBuilder polylinePoint = new StringBuilder(@"
@@ -1203,13 +1213,14 @@ namespace tankers.distances
             var legs = (from e in _voyagexml.Descendants(_xmlns + "Legs").Elements(_xmlns + "Leg")
                         select new Leg()
                         {
-                            
+
                             fromPort = e.Elements(_xmlns + "FromPort")
                             .Select(r => new Port()
                             {
                                 name = (string)r.Element(_xmlns + "Name"),
-                                code = (string)r.Element(_xmlns + "Code")
-
+                                code = (string)r.Element(_xmlns + "Code"),
+                                LatGeodetic = r.Element(_xmlns + "LatGeodetic").Value,
+                                Lon = r.Element(_xmlns + "Lon").Value
                             }).FirstOrDefault(),
 
                             toPort = e.Elements(_xmlns + "ToPort")
@@ -1217,9 +1228,11 @@ namespace tankers.distances
                             {
                                 name = r.Element(_xmlns + "Name") != null ? r.Element(_xmlns + "Name").Value : "",
                                 code = r.Element(_xmlns + "Code") != null ? r.Element(_xmlns + "Code").Value : "",
+                                LatGeodetic = r.Element(_xmlns + "LatGeodetic").Value,
+                                Lon = r.Element(_xmlns + "Lon").Value
 
                             }).First(),
-                            
+
 
                             WayPointList = e.Element(_xmlns + "Waypoints").Elements(_xmlns + "Waypoint")
                             .Select(r => new WayPoint()
@@ -1228,27 +1241,66 @@ namespace tankers.distances
                                 DistanceFromStart = Convert.ToDecimal(r.Element(_xmlns + "DistanceFromStart").Value),
                                 routingPointCode = r.Element(_xmlns + "RoutingPoint") != null ? r.Element(_xmlns + "RoutingPoint").Value : "",
                                 EcaZoneToPrevious = r.Element(_xmlns + "EcaZoneToPrevious") != null ? r.Element(_xmlns + "EcaZoneToPrevious").Value : "",
-                                LatGeodetic = Convert.ToDecimal(r.Element(_xmlns + "LatGeodetic").Value),
-                                Lon = Convert.ToDecimal(r.Element(_xmlns + "Lon").Value)
+                                LatGeodetic = r.Element(_xmlns + "LatGeodetic").Value,
+                                Lon = r.Element(_xmlns + "Lon").Value
                             }).ToList()
 
                         }).ToList();
+
+
+            int iLegIndex = 0;
+            int iLegCount = legs.Count();
+
+
+            decimal dDistanceFromStart = 0;
+
+            /* now the model has been populated we try and construct the route */
             foreach (Leg leg in legs)
             {
+                string sFromCode = leg.fromPort.code;
+                string sToCode = leg.toPort.code;
+
                 foreach (WayPoint wp in leg.WayPointList)
                 {
-                    if (wp.name!=null && wp.name!="")
+                    bool bShowPortPopup = false;
+                    bool bDrawPolygon = true;
+                    if (wp.name == sFromCode)
                     {
+                        wp.name = leg.fromPort.name;
+                        if (iLegIndex == 0)
+                        {
+                            bShowPortPopup = true;
+                        }
+                        else
+                        {
+                            bDrawPolygon = false;
+                        }
+                    }
+                    if (wp.name == sToCode)
+                    {
+                        wp.name = leg.toPort.name;
+                        bShowPortPopup = true;
+                    }
+
+                    if (bShowPortPopup)
+                    {
+
+                        dDistanceFromStart += wp.DistanceFromStart;
+
                         popupDetail.Append(@"
                             L.marker([").Append(wp.LatGeodetic.ToString()).Append(",").Append(wp.Lon.ToString()).Append(@"]).addTo(map)
-                            .bindPopup('<b>").Append(wp.name).Append("</b><br/>Lat:").Append(String.Format("{0:0.00}", wp.LatGeodetic)).Append(", Lon:").Append(String.Format("{0:0.00}", wp.Lon)).Append(@"')
+                            .bindPopup('<h2>").Append(wp.name).Append("</h2><br/>Lat:").Append(String.Format("{0:0.00}", wp.LatGeodetic)).Append(", Lon:").Append(String.Format("{0:0.00}", wp.Lon)).Append("<br/>Distance From Start:").Append(String.Format("{0:0.00}", dDistanceFromStart)).Append("<br/>Distance of Leg:").Append(String.Format("{0:0.00}", wp.DistanceFromStart)).Append(@"')
                             .openPopup();
                         ");
 
                     }
-
-                    polylinePoint.Append("new L.LatLng(").Append(wp.LatGeodetic.ToString()).Append(",").Append(wp.Lon.ToString()).Append("),");
+                    if (bDrawPolygon)
+                    {
+                        polylinePoint.Append("new L.LatLng(").Append(wp.LatGeodetic.ToString()).Append(",").Append(wp.Lon.ToString()).Append("),");
+                    }
                 }
+
+                iLegIndex++;
             }
             sHtmlSource.Append(popupDetail);
 
@@ -1285,7 +1337,7 @@ namespace tankers.distances
         }
 
 
-
+        
 
 
         /// <summary>
@@ -1296,56 +1348,273 @@ namespace tankers.distances
         /// author              AGL027
         /// </summary>
         private String _composeMapOptionString(String optionMapString)
+{
+    List<string> mapOptionList;
+    StringBuilder optionQueryString = new StringBuilder();
+    mapOptionList = optionMapString.Split('|').ToList();
+
+
+    if (mapOptionList.Count == 0)
+    {
+        return "";
+    }
+    else
+    {
+        if (mapOptionList[0] == "1")
         {
-            List<string> mapOptionList;
-            StringBuilder optionQueryString = new StringBuilder();
-            mapOptionList = optionMapString.Split('|').ToList();
-
-
-            if (mapOptionList.Count == 0)
-            {
-                return "";
-            }
-            else
-            {
-                if (mapOptionList[0] == "1")
-                {
-                    optionQueryString.Append("&zoom=true");
-                }
-                else
-                {
-                    optionQueryString.Append("&zoom=false");
-                }
-
-                if (mapOptionList[1] == "1")
-                {
-                    optionQueryString.Append("&showPortLabels=true");
-                }
-                else
-                {
-                    optionQueryString.Append("&showPortLabels=false");
-                }
-                
-                /* map height */
-                if (mapOptionList[2] != "") optionQueryString.Append("&height=").Append(mapOptionList[2].ToString());
-                /* map width */
-                if (mapOptionList[3] != "") optionQueryString.Append("&width=").Append(mapOptionList[3].ToString());
-                /* port label font color  */
-                if (mapOptionList[4] != "") optionQueryString.Append("&portLabelColor=").Append(mapOptionList[4].ToString());
-                /* port label font size */
-                if (mapOptionList[5] != "") optionQueryString.Append("&portLabelFontSize=").Append(mapOptionList[5].ToString());
-                /* coastline background color  */
-                if (mapOptionList[6] != "") optionQueryString.Append("&coastlineColor=").Append(mapOptionList[6].ToString());
-                /* land background color  */
-                if (mapOptionList[7] != "") optionQueryString.Append("&landColor=").Append(mapOptionList[7].ToString());
-                /* sea background color  */
-                if (mapOptionList[8] != "") optionQueryString.Append("&seaColor=").Append(mapOptionList[8].ToString());
-
-                // We decide to change default colours
-                // optionQueryString.Append("&landcolor=35,73,88&coastLineColor=76,188,208");
-            }
-            return optionQueryString.ToString();
+            optionQueryString.Append("&zoom=true");
         }
+        else
+        {
+            optionQueryString.Append("&zoom=false");
+        }
+
+        if (mapOptionList[1] == "1")
+        {
+            optionQueryString.Append("&showPortLabels=true");
+        }
+        else
+        {
+            optionQueryString.Append("&showPortLabels=false");
+        }
+
+        /* map height */
+        if (mapOptionList[2] != "") optionQueryString.Append("&height=").Append(mapOptionList[2].ToString());
+        /* map width */
+        if (mapOptionList[3] != "") optionQueryString.Append("&width=").Append(mapOptionList[3].ToString());
+        /* port label font color  */
+        if (mapOptionList[4] != "") optionQueryString.Append("&portLabelColor=").Append(mapOptionList[4].ToString());
+        /* port label font size */
+        if (mapOptionList[5] != "") optionQueryString.Append("&portLabelFontSize=").Append(mapOptionList[5].ToString());
+        /* coastline background color  */
+        if (mapOptionList[6] != "") optionQueryString.Append("&coastlineColor=").Append(mapOptionList[6].ToString());
+        /* land background color  */
+        if (mapOptionList[7] != "") optionQueryString.Append("&landColor=").Append(mapOptionList[7].ToString());
+        /* sea background color  */
+        if (mapOptionList[8] != "") optionQueryString.Append("&seaColor=").Append(mapOptionList[8].ToString());
+
+        // We decide to change default colours
+        // optionQueryString.Append("&landcolor=35,73,88&coastLineColor=76,188,208");
+    }
+    return optionQueryString.ToString();
+}
+
+        /// <summary>
+        /// This method with public scope is called by consumer to obtain the map image.  It requires assistance from both  _composeMapOptionString() and _downloadDataFromURL()
+        /// 
+        /// date created        20171019
+        /// last modified       20171021
+        /// author              AGL027
+        /// </summary>
+        public string GetGeoJsonData()
+        {
+            StringBuilder sGeoJsonData = new StringBuilder("");
+            StringBuilder sAbcMarkerPorts = new StringBuilder("");
+            StringBuilder sAbcLegRouting = new StringBuilder("");
+            StringBuilder sAbcLegRoutingFeaturePre = new StringBuilder("");
+            StringBuilder sAbcMarkerRPs = new StringBuilder("");
+
+            // todo - need to keep track of all closed routing points..
+
+            var legs = (from e in _voyagexml.Descendants(_xmlns + "Legs").Elements(_xmlns + "Leg")
+                        select new Leg()
+                        {
+
+                            fromPort = e.Elements(_xmlns + "FromPort")
+                            .Select(r => new Port()
+                            {
+                                name = (string)r.Element(_xmlns + "Name"),
+                                code = (string)r.Element(_xmlns + "Code"),
+                                LatGeodetic = r.Element(_xmlns + "LatGeodetic").Value,
+                                Lon = r.Element(_xmlns + "Lon").Value
+                            }).FirstOrDefault(),
+
+                            toPort = e.Elements(_xmlns + "ToPort")
+                            .Select(r => new Port()
+                            {
+                                name = r.Element(_xmlns + "Name") != null ? r.Element(_xmlns + "Name").Value : "",
+                                code = r.Element(_xmlns + "Code") != null ? r.Element(_xmlns + "Code").Value : "",
+                                LatGeodetic = r.Element(_xmlns + "LatGeodetic").Value,
+                                Lon = r.Element(_xmlns + "Lon").Value
+
+                            }).First(),
+
+                            WayPointList = e.Element(_xmlns + "Waypoints").Elements(_xmlns + "Waypoint")
+                            .Select(r => new WayPoint()
+                            {
+                                name = r.Element(_xmlns + "Name") != null ? r.Element(_xmlns + "Name").Value : "",
+                                DistanceFromStart = Convert.ToDecimal(r.Element(_xmlns + "DistanceFromStart").Value),
+                                routingPointCode = r.Element(_xmlns + "RoutingPoint") != null ? r.Element(_xmlns + "RoutingPoint").Value : "",
+                                EcaZoneToPrevious = r.Element(_xmlns + "EcaZoneToPrevious") != null ? r.Element(_xmlns + "EcaZoneToPrevious").Value : "",
+                                LatGeodetic = r.Element(_xmlns + "LatGeodetic").Value,
+                                Lon = r.Element(_xmlns + "Lon").Value
+
+                            }).ToList()
+
+                        }).ToList();
+            
+            /* on every waypoint we add detail to this collection */
+            sAbcLegRouting.Append(@"
+var abc_routing = {
+    ""type"": ""FeatureCollection"",
+    ""features"": [
+            ");
+
+            /* on a port level we add the detail to this collection */
+            sAbcMarkerPorts.Append(@"
+var abc_marker_ports={
+  ""type"": ""FeatureCollection"",
+  ""features"": [
+            ");
+
+            sAbcMarkerRPs.Append(@"
+var abc_routing_points={
+  ""type"": ""FeatureCollection"",
+  ""features"": [
+");
+
+            sAbcLegRoutingFeaturePre.Append(@"
+{
+    ""type"": ""Feature"",
+        ""geometry"": {
+        ""type"": ""LineString"",
+        ""coordinates"": [");
+
+            int iLegIndex = 0;
+            int iLegCount = legs.Count();
+            decimal dDistanceFromStart = 0;
+
+            /* now the model has been populated we try and construct the route */
+            foreach (Leg leg in legs)
+            {
+ 
+
+                string sFromCode = leg.fromPort.code;
+                string sToCode = leg.toPort.code;
+                
+
+                StringBuilder sAbcLegRoutingFeaturePost = new StringBuilder();
+                StringBuilder sAbcLegRoutingCoord = new StringBuilder();
+
+                foreach (WayPoint wp in leg.WayPointList)
+                {
+   
+                    bool bShowPortPopup = false;
+                    bool bDrawPolyline = true;
+
+                    if (wp.name == sFromCode)
+                    {
+                        wp.name = leg.fromPort.name;
+                        if (iLegIndex == 0)
+                        {
+                            bShowPortPopup = true;
+                        }
+                        else
+                        {
+                            bDrawPolyline = false;
+                        }
+                    }
+                    if (wp.name == sToCode)
+                    {
+                        wp.name = leg.toPort.name;
+                        bShowPortPopup = true;
+                        
+                        // TODO add lat/lon
+                        sAbcLegRoutingFeaturePost.Append(@"
+]
+    },
+    ""properties"": {
+        ""popupContent"": ""<h2>").Append(@wp.name).Append(@"<h2>"",
+        ""Description"": """).Append(leg.fromPort.name).Append(@" to ").Append(leg.toPort.name).Append(@"""
+},
+""id"": ").Append(iLegIndex.ToString()).Append(@"
+},
+");   
+                    }
+                    if (wp.routingPointCode!="")
+                    {
+                        sAbcMarkerRPs.Append(@"
+                        {
+                           ""type"": ""Feature"",
+                              ""geometry"": {
+                                ""type"": ""Point"",
+                                ""coordinates"": [").Append(wp.Lon).Append(",").Append(wp.LatGeodetic).Append(@"
+                                ]
+                            },
+                              ""properties"": {
+                                ""ShortCode"": """).Append(wp.routingPointCode).Append(@""",
+                                ""Name"": """).Append(wp.name).Append(@""",
+                                ""LegIndex"": ").Append(iLegIndex.ToString()).Append(@",
+                                ""Open"": true
+                              }
+                            },
+                        ");
+                        
+                    }
+                   
+
+                    if (bDrawPolyline)
+                    {
+                        sAbcLegRoutingCoord.Append("[").Append(wp.Lon).Append(",").Append(wp.LatGeodetic).Append("],");
+                    }
+
+                    if (bShowPortPopup)
+                    {
+
+                        dDistanceFromStart += wp.DistanceFromStart;
+                        
+                        sAbcMarkerPorts.Append(@"
+                        {
+                           ""type"": ""Feature"",
+                              ""geometry"": {
+                                ""type"": ""Point"",
+                                ""coordinates"": [").Append(wp.Lon).Append(",").Append(wp.LatGeodetic).Append(@"
+                                ]
+                            },
+                              ""properties"": {
+                                ""PortName"": """).Append(wp.name).Append(@""",
+                                ""Lat"": ").Append(String.Format("{0:0.00}", Convert.ToDecimal(wp.LatGeodetic))).Append(@",
+                                ""Lon"": ").Append(String.Format("{0:0.00}", Convert.ToDecimal(wp.Lon))).Append(@",
+                                ""DistanceFromStart"": ").Append(String.Format("{0:0.00}", dDistanceFromStart)).Append(@",
+                                ""LegDistance"": ").Append(String.Format("{0:0.00}", wp.DistanceFromStart)).Append(@"
+                              }
+                            },
+                        ");
+                        
+                    }
+                    
+                }
+
+                
+                sAbcLegRouting.Append(@sAbcLegRoutingFeaturePre).Append(@sAbcLegRoutingCoord).Append(@sAbcLegRoutingFeaturePost);
+
+                
+                iLegIndex++;
+            }
+
+            sAbcMarkerRPs.Append(@"
+    ]
+};
+");
+
+
+            sAbcLegRouting.Append(@"
+    ]
+};
+");
+
+            sAbcMarkerPorts.Append(@"
+	]	
+};
+");
+            sGeoJsonData.Append(@sAbcLegRouting).Append(@sAbcMarkerPorts).Append(sAbcMarkerRPs);
+            return sGeoJsonData.ToString();
+        }
+
+
+        
+
+
 
     }
 
