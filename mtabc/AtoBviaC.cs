@@ -10,6 +10,7 @@ using tankers.distances.models;
 using System.Collections;
 using System.Web;
 using System.Collections.Specialized;
+using System.Globalization;
 
 /* CR4343 */
 namespace tankers.distances
@@ -1219,8 +1220,8 @@ namespace tankers.distances
                             {
                                 name = (string)r.Element(_xmlns + "Name"),
                                 code = (string)r.Element(_xmlns + "Code"),
-                                LatGeodetic = r.Element(_xmlns + "LatGeodetic").Value,
-                                Lon = r.Element(_xmlns + "Lon").Value
+                                LatGeodetic = double.Parse(r.Element(_xmlns + "LatGeodetic").Value, CultureInfo.InvariantCulture),
+                                Lon = double.Parse(r.Element(_xmlns + "Lon").Value, CultureInfo.InvariantCulture)
                             }).FirstOrDefault(),
 
                             toPort = e.Elements(_xmlns + "ToPort")
@@ -1228,8 +1229,8 @@ namespace tankers.distances
                             {
                                 name = r.Element(_xmlns + "Name") != null ? r.Element(_xmlns + "Name").Value : "",
                                 code = r.Element(_xmlns + "Code") != null ? r.Element(_xmlns + "Code").Value : "",
-                                LatGeodetic = r.Element(_xmlns + "LatGeodetic").Value,
-                                Lon = r.Element(_xmlns + "Lon").Value
+                                LatGeodetic = double.Parse(r.Element(_xmlns + "LatGeodetic").Value, CultureInfo.InvariantCulture),
+                                Lon = double.Parse(r.Element(_xmlns + "Lon").Value, CultureInfo.InvariantCulture)
 
                             }).First(),
 
@@ -1241,8 +1242,8 @@ namespace tankers.distances
                                 DistanceFromStart = Convert.ToDecimal(r.Element(_xmlns + "DistanceFromStart").Value),
                                 routingPointCode = r.Element(_xmlns + "RoutingPoint") != null ? r.Element(_xmlns + "RoutingPoint").Value : "",
                                 EcaZoneToPrevious = r.Element(_xmlns + "EcaZoneToPrevious") != null ? r.Element(_xmlns + "EcaZoneToPrevious").Value : "",
-                                LatGeodetic = r.Element(_xmlns + "LatGeodetic").Value,
-                                Lon = r.Element(_xmlns + "Lon").Value
+                                LatGeodetic = double.Parse(r.Element(_xmlns + "LatGeodetic").Value, CultureInfo.InvariantCulture),
+                                Lon = double.Parse(r.Element(_xmlns + "Lon").Value, CultureInfo.InvariantCulture)
                             }).ToList()
 
                         }).ToList();
@@ -1403,7 +1404,7 @@ namespace tankers.distances
         /// This method with public scope is called by consumer to obtain the map image.  It requires assistance from both  _composeMapOptionString() and _downloadDataFromURL()
         /// 
         /// date created        20171019
-        /// last modified       20171021
+        /// last modified       20171023
         /// author              AGL027
         /// </summary>
         public string GetGeoJsonData()
@@ -1414,7 +1415,12 @@ namespace tankers.distances
             StringBuilder sAbcLegRoutingFeaturePre = new StringBuilder("");
             StringBuilder sAbcMarkerRPs = new StringBuilder("");
 
-            // todo - need to keep track of all closed routing points..
+            double dAdustment=0;
+            double dPreviousLon = 0;
+            bool firstWayPoint=true;
+
+            // todo -   need to keep track of all closed routing points..
+            //          document
 
             var legs = (from e in _voyagexml.Descendants(_xmlns + "Legs").Elements(_xmlns + "Leg")
                         select new Leg()
@@ -1425,17 +1431,17 @@ namespace tankers.distances
                             {
                                 name = (string)r.Element(_xmlns + "Name"),
                                 code = (string)r.Element(_xmlns + "Code"),
-                                LatGeodetic = r.Element(_xmlns + "LatGeodetic").Value,
-                                Lon = r.Element(_xmlns + "Lon").Value
-                            }).FirstOrDefault(),
+                                LatGeodetic = double.Parse(r.Element(_xmlns + "LatGeodetic").Value, CultureInfo.InvariantCulture),
+                                Lon = double.Parse(r.Element(_xmlns + "Lon").Value,CultureInfo.InvariantCulture)
+                        }).FirstOrDefault(),
 
                             toPort = e.Elements(_xmlns + "ToPort")
                             .Select(r => new Port()
                             {
                                 name = r.Element(_xmlns + "Name") != null ? r.Element(_xmlns + "Name").Value : "",
                                 code = r.Element(_xmlns + "Code") != null ? r.Element(_xmlns + "Code").Value : "",
-                                LatGeodetic = r.Element(_xmlns + "LatGeodetic").Value,
-                                Lon = r.Element(_xmlns + "Lon").Value
+                                LatGeodetic = double.Parse(r.Element(_xmlns + "LatGeodetic").Value, CultureInfo.InvariantCulture),
+                                Lon = double.Parse(r.Element(_xmlns + "Lon").Value, CultureInfo.InvariantCulture)
 
                             }).First(),
 
@@ -1446,8 +1452,8 @@ namespace tankers.distances
                                 DistanceFromStart = Convert.ToDecimal(r.Element(_xmlns + "DistanceFromStart").Value),
                                 routingPointCode = r.Element(_xmlns + "RoutingPoint") != null ? r.Element(_xmlns + "RoutingPoint").Value : "",
                                 EcaZoneToPrevious = r.Element(_xmlns + "EcaZoneToPrevious") != null ? r.Element(_xmlns + "EcaZoneToPrevious").Value : "",
-                                LatGeodetic = r.Element(_xmlns + "LatGeodetic").Value,
-                                Lon = r.Element(_xmlns + "Lon").Value
+                                LatGeodetic = double.Parse(r.Element(_xmlns + "LatGeodetic").Value, CultureInfo.InvariantCulture),
+                                Lon = double.Parse(r.Element(_xmlns + "Lon").Value, CultureInfo.InvariantCulture)
 
                             }).ToList()
 
@@ -1488,16 +1494,19 @@ var abc_routing_points={
             foreach (Leg leg in legs)
             {
  
-
                 string sFromCode = leg.fromPort.code;
                 string sToCode = leg.toPort.code;
                 
-
                 StringBuilder sAbcLegRoutingFeaturePost = new StringBuilder();
                 StringBuilder sAbcLegRoutingCoord = new StringBuilder();
 
                 foreach (WayPoint wp in leg.WayPointList)
                 {
+                    if (firstWayPoint)
+                    {
+                        dPreviousLon = wp.Lon;
+                        firstWayPoint = false;
+                    }
    
                     bool bShowPortPopup = false;
                     bool bDrawPolyline = true;
@@ -1518,8 +1527,7 @@ var abc_routing_points={
                     {
                         wp.name = leg.toPort.name;
                         bShowPortPopup = true;
-                        
-                        // TODO add lat/lon
+
                         sAbcLegRoutingFeaturePost.Append(@"
 ]
     },
@@ -1531,6 +1539,19 @@ var abc_routing_points={
 },
 ");   
                     }
+
+                    /* adjust longitude */
+                    if (wp.Lon > (dPreviousLon + 180))
+                    {
+                        dAdustment -= 360;
+                    }
+                    else if (wp.Lon < (dPreviousLon - 180))
+                    {
+                        dAdustment += 360;
+                    }
+                    dPreviousLon = wp.Lon;
+                    wp.Lon += dAdustment;
+
                     if (wp.routingPointCode!="")
                     {
                         sAbcMarkerRPs.Append(@"
@@ -1543,7 +1564,7 @@ var abc_routing_points={
                             },
                               ""properties"": {
                                 ""ShortCode"": """).Append(wp.routingPointCode).Append(@""",
-                                ""Name"": """).Append(wp.name).Append(@""",
+                                ""Name"": """).Append(_getRPName(wp.routingPointCode.ToString())).Append(@""",
                                 ""LegIndex"": ").Append(iLegIndex.ToString()).Append(@",
                                 ""Open"": true
                               }
@@ -1552,17 +1573,14 @@ var abc_routing_points={
                         
                     }
                    
-
                     if (bDrawPolyline)
-                    {
-                        sAbcLegRoutingCoord.Append("[").Append(wp.Lon).Append(",").Append(wp.LatGeodetic).Append("],");
+                    { 
+                        sAbcLegRoutingCoord.Append("[").Append( wp.Lon.ToString()).Append(",").Append(wp.LatGeodetic.ToString()).Append("],");
                     }
 
                     if (bShowPortPopup)
                     {
-
                         dDistanceFromStart += wp.DistanceFromStart;
-                        
                         sAbcMarkerPorts.Append(@"
                         {
                            ""type"": ""Feature"",
@@ -1573,8 +1591,8 @@ var abc_routing_points={
                             },
                               ""properties"": {
                                 ""PortName"": """).Append(wp.name).Append(@""",
-                                ""Lat"": ").Append(String.Format("{0:0.00}", Convert.ToDecimal(wp.LatGeodetic))).Append(@",
-                                ""Lon"": ").Append(String.Format("{0:0.00}", Convert.ToDecimal(wp.Lon))).Append(@",
+                                ""Lat"": ").Append(String.Format("{0:0.00}", wp.LatGeodetic)).Append(@",
+                                ""Lon"": ").Append(String.Format("{0:0.00}", wp.Lon)).Append(@",
                                 ""DistanceFromStart"": ").Append(String.Format("{0:0.00}", dDistanceFromStart)).Append(@",
                                 ""LegDistance"": ").Append(String.Format("{0:0.00}", wp.DistanceFromStart)).Append(@"
                               }
@@ -1584,14 +1602,9 @@ var abc_routing_points={
                     }
                     
                 }
-
-                
                 sAbcLegRouting.Append(@sAbcLegRoutingFeaturePre).Append(@sAbcLegRoutingCoord).Append(@sAbcLegRoutingFeaturePost);
-
-                
                 iLegIndex++;
             }
-
             sAbcMarkerRPs.Append(@"
     ]
 };
