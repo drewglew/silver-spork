@@ -202,11 +202,12 @@ namespace tankers.distances
 
         /// <summary>
         /// low level communication to web service; this is to handle image processing
+        /// Not used
         /// </summary>
         /// 
         /// <remarks>
         /// date created        20161205
-        /// last modified       20161205
+        /// last modified       20171030
         /// author              AGL027
         /// </remarks>
         /// 
@@ -435,12 +436,10 @@ namespace tankers.distances
 
             /* new item since 20171016 */
             additionalParms.Append("&waypointResolution=detailed-high");
-
-
+            
             /* concatinate all the parameters needed and pass back to calling process */
             parturl.Append(portParms).Append(openDefaultParms).Append(closeDefaultParms).Append(openParms).Append(closeParms).Append(additionalParms);
             //System.Windows.Forms.MessageBox.Show(parturl.ToString());
-
             return parturl.ToString();
         }
 
@@ -636,7 +635,7 @@ namespace tankers.distances
                 finalRoutings.Add("close=" + difference.ToString());
                 String shortCode = difference;
 
-                _routingsForDW.Append(difference.ToString()).Append("\t").Append(_getRPName(shortCode.Substring(0, 3))).Append("\t").Append("0").Append("\t").Append(_getOpenByDefault(shortCode.Substring(0, 3))).Append("\r\n");
+                _routingsForDW.Append(difference.ToString()).Append("\t").Append(GetRPDataByShortCode(shortCode.Substring(0, 3),1)).Append("\t").Append("0").Append("\t").Append(_getOpenByDefault(shortCode.Substring(0, 3))).Append("\r\n");
             }
 
 
@@ -645,7 +644,7 @@ namespace tankers.distances
                 finalRoutings.Add("open=" + openRouting);
                 String shortCode = openRouting;
 
-                _routingsForDW.Append(openRouting.ToString()).Append("\t").Append(_getRPName(shortCode.Substring(0, 3))).Append("\t").Append("1").Append("\t").Append(_getOpenByDefault(shortCode.Substring(0, 3))).Append("\r\n");
+                _routingsForDW.Append(openRouting.ToString()).Append("\t").Append(GetRPDataByShortCode(shortCode.Substring(0, 3),1)).Append("\t").Append("1").Append("\t").Append(_getOpenByDefault(shortCode.Substring(0, 3))).Append("\r\n");
             }
 
             string finalRoutingParms = String.Join("&", finalRoutings.ToArray());
@@ -835,7 +834,7 @@ namespace tankers.distances
 
                         else if (wp.routingPointCode != "")
                         {
-                            wayPointData.Append(wp.routingPointCode).Append("\t").Append(_getRPName(wp.routingPointCode)).Append("\t").Append(sumOfDistancesSinceLastKnown.ToString()).Append("\t").Append(sumOfEcaZoneDistancesSinceLastKnown.ToString()).Append("\t").Append(is_eca).Append("\r\n");
+                            wayPointData.Append(wp.routingPointCode).Append("\t").Append(GetRPDataByShortCode(wp.routingPointCode,1)).Append("\t").Append(sumOfDistancesSinceLastKnown.ToString()).Append("\t").Append(sumOfEcaZoneDistancesSinceLastKnown.ToString()).Append("\t").Append(is_eca).Append("\r\n");
                             sumOfDistancesSinceLastKnown = 0;
                             sumOfEcaZoneDistancesSinceLastKnown = 0;
                         }
@@ -899,7 +898,7 @@ namespace tankers.distances
 
                 if (rpShortCode != "")
                 {
-                    _routingsForDW.Append(rpShortCode.ToString()).Append("\t").Append(_getRPName(rpShortCode)).Append("\t").Append("0").Append("\t").Append(_getOpenByDefault(rpShortCode)).Append("\r\n");
+                    _routingsForDW.Append(rpShortCode.ToString()).Append("\t").Append(GetRPDataByShortCode(rpShortCode,1)).Append("\t").Append("0").Append("\t").Append(_getOpenByDefault(rpShortCode)).Append("\r\n");
                 }
 
             }
@@ -919,6 +918,9 @@ namespace tankers.distances
         {
             return _rpNamesInLeg.ToString();
         }
+
+ 
+
 
         /// <summary>
         /// Obtain single delimited collection of routing point short codes inside a string
@@ -1009,16 +1011,45 @@ namespace tankers.distances
         /// Get the full routing point name of Routing Point ShortName that is passed in.
         /// 
         /// date created        20161213
-        /// last modified       20161213
+        /// last modified       20171023
         /// author              AGL027
         /// </summary>
-        private String _getRPName(String rpShortCode)
+        /// <param name="rpShortCode">AtoBviaC routing port code</param>
+        /// <param name="iType">1 = only return the name; 2 = return '|' delimted data</param>
+        public String GetRPDataByShortCode(String rpShortCode, int iType)
         {
-            var rpname = (from rp in _routingpointxml_cached.Descendants(_xmlns + "RoutingPoint")
+            StringBuilder sData = new StringBuilder("");
+            if (iType == 1) { 
+                var rpname = (from rp in _routingpointxml_cached.Descendants(_xmlns + "RoutingPoint")
                           where rp.Element(_xmlns + "ShortCode").Value.Contains(rpShortCode)
                           select rp.Element(_xmlns + "Name").Value).FirstOrDefault();
 
-            return rpname.ToString();
+                sData.Append(rpname.ToString());
+
+            } else
+            {
+                var rpdata = from rp in _routingpointxml_cached.Descendants(_xmlns + "RoutingPoint")
+                          where rp.Element(_xmlns + "ShortCode").Value.Contains(rpShortCode)
+                          select new ActiveRoutingPoint
+                          {
+                              ShortCode = rpShortCode, 
+                              Name = rp.Element(_xmlns + "Name").Value,
+                              IsOpen = Convert.ToBoolean(rp.Element(_xmlns + "OpenByDefault").Value),
+                          };
+                
+               foreach(ActiveRoutingPoint item in rpdata)
+               {
+                    sData.Append(item.ShortCode).Append("|").Append(item.Name).Append("|");
+                    if (item.IsOpen.ToString().ToLower() == "true")
+                    {
+                        sData.Append("1");
+                    } else {
+                        sData.Append("0");
+                    }
+                    
+               }
+            }
+            return sData.ToString();
         }
 
         /// <summary>
@@ -1070,7 +1101,7 @@ namespace tankers.distances
             foreach (var parmItem in parmData)
             {
                 _rpShortCodesInLeg.Append(parmItem.ToString() + "|");
-                _rpNamesInLeg.Append(_getRPName(parmItem.ToString()) + "|");
+                _rpNamesInLeg.Append(GetRPDataByShortCode(parmItem.ToString(),1) + "|");
             }
 
             return _rpShortCodesInLeg.ToString();
@@ -1094,11 +1125,11 @@ namespace tankers.distances
             {
                 if (item.key == "open")
                 {
-                    _routingsForDW.Append(item.value).Append("\t").Append(_getRPName(item.value.Substring(0, 3))).Append("\t").Append("1").Append("\t").Append(_getOpenByDefault(item.value.Substring(0, 3))).Append("\r\n");
+                    _routingsForDW.Append(item.value).Append("\t").Append(GetRPDataByShortCode(item.value.Substring(0, 3),1)).Append("\t").Append("1").Append("\t").Append(_getOpenByDefault(item.value.Substring(0, 3))).Append("\r\n");
                 }
                 else if (item.key == "close")
                 {
-                    _routingsForDW.Append(item.value).Append("\t").Append(_getRPName(item.value.Substring(0, 3))).Append("\t").Append("0").Append("\t").Append(_getOpenByDefault(item.value.Substring(0, 3))).Append("\r\n");
+                    _routingsForDW.Append(item.value).Append("\t").Append(GetRPDataByShortCode(item.value.Substring(0, 3),1)).Append("\t").Append("0").Append("\t").Append(_getOpenByDefault(item.value.Substring(0, 3))).Append("\r\n");
                 }
             }
             return _routingsForDW.ToString();
@@ -1161,186 +1192,7 @@ namespace tankers.distances
             return content;
         }
 
-
-        /// <summary>
-        /// This method with public scope is called by consumer to obtain the map image.  It requires assistance from both  _composeMapOptionString() and _downloadDataFromURL()
-        /// 
-        /// date created        20171016
-        /// last modified       20171018
-        /// author              AGL027
-        /// </summary>
-        public string GetLeafletHTMLSource(String wsParmString, int mapHeight)
-        {
-            StringBuilder sHtmlSource = new StringBuilder("");
-
-            sHtmlSource.Append(@"
-<html>
-<head>
-    <meta http-equiv='X-UA-Compatible' content='IE = Edge'/>
-   <title>AtoBviaC Map with Leaflet</title>
-   <link rel='stylesheet' href='leaflet/leaflet.css'/>
-   <!--[if lte IE 8]><link rel = 'stylesheet' href = 'leaflet/leaflet.ie.css'/><![endif]-->
-       <script src = 'leaflet/leaflet.js' ></script>
-         <meta charset = 'utf-8'>
-            <meta name = 'viewport' content = 'width =device-width, initial-scale=1.0' >
-            <link href = 'docs /images/favicon.ico' rel = 'shortcut icon' type = 'image/x-icon' >
-            <link href = 'https://unpkg.com/leaflet@1.2.0/dist/leaflet.css' rel = 'stylesheet' crossorigin = '' integrity = 'sha512-M2wvCLH6DSRazYeZRIm1JnYyh22purTM+FDB5CsyxtQJYeKq83arPe5wgbNmcFXGqiSH2XR8dT/fJISVA1r/zQ=='>
-                    <script src = 'https://unpkg.com/leaflet@1.2.0/dist/leaflet.js' crossorigin = '' integrity = 'sha512-lInM/apFSqyy1o6s89K4iQUKg6ppXEgsVxT35HbzUupEVRh2Eu9Wdl4tHj7dZO0s1uvplcYGmt3498TtHq+log=='></script >
-                        <script language = 'javascript'>
-                        function init() {
-            var map = new L.Map('map', {
-            	zoomControl: false
-		    });                       
-                
-      	 	L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-	            maxZoom: 18,
-	            attribution: '&copy; <a href=""http://www.openstreetmap.org/copyright"">OpenStreetMap</a>'
-            }).addTo(map);
-
-            L.tileLayer('https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png', {
-	            maxZoom: 18,
-	            attribution: 'Map data: &copy; <a href=""http://www.openseamap.org"">OpenSeaMap</a> contributors'
-            }).addTo(map);
-
-            map.attributionControl.setPrefix(''); // Don't show the 'Powered by Leaflet' text.");
-
-            int countOfLegs = (int)_voyagexml.Descendants(_xmlns + "Leg").Count();
-
-            StringBuilder polylinePoint = new StringBuilder(@"
-            //Define an array of Latlng objects (points along the line)
-            var polylinePoints = [");
-            StringBuilder popupDetail = new StringBuilder();
-
-            var legs = (from e in _voyagexml.Descendants(_xmlns + "Legs").Elements(_xmlns + "Leg")
-                        select new Leg()
-                        {
-
-                            fromPort = e.Elements(_xmlns + "FromPort")
-                            .Select(r => new Port()
-                            {
-                                name = (string)r.Element(_xmlns + "Name"),
-                                code = (string)r.Element(_xmlns + "Code"),
-                                LatGeodetic = double.Parse(r.Element(_xmlns + "LatGeodetic").Value, CultureInfo.InvariantCulture),
-                                Lon = double.Parse(r.Element(_xmlns + "Lon").Value, CultureInfo.InvariantCulture)
-                            }).FirstOrDefault(),
-
-                            toPort = e.Elements(_xmlns + "ToPort")
-                            .Select(r => new Port()
-                            {
-                                name = r.Element(_xmlns + "Name") != null ? r.Element(_xmlns + "Name").Value : "",
-                                code = r.Element(_xmlns + "Code") != null ? r.Element(_xmlns + "Code").Value : "",
-                                LatGeodetic = double.Parse(r.Element(_xmlns + "LatGeodetic").Value, CultureInfo.InvariantCulture),
-                                Lon = double.Parse(r.Element(_xmlns + "Lon").Value, CultureInfo.InvariantCulture)
-
-                            }).First(),
-
-
-                            WayPointList = e.Element(_xmlns + "Waypoints").Elements(_xmlns + "Waypoint")
-                            .Select(r => new WayPoint()
-                            {
-                                name = r.Element(_xmlns + "Name") != null ? r.Element(_xmlns + "Name").Value : "",
-                                DistanceFromStart = Convert.ToDecimal(r.Element(_xmlns + "DistanceFromStart").Value),
-                                routingPointCode = r.Element(_xmlns + "RoutingPoint") != null ? r.Element(_xmlns + "RoutingPoint").Value : "",
-                                EcaZoneToPrevious = r.Element(_xmlns + "EcaZoneToPrevious") != null ? r.Element(_xmlns + "EcaZoneToPrevious").Value : "",
-                                LatGeodetic = double.Parse(r.Element(_xmlns + "LatGeodetic").Value, CultureInfo.InvariantCulture),
-                                Lon = double.Parse(r.Element(_xmlns + "Lon").Value, CultureInfo.InvariantCulture)
-                            }).ToList()
-
-                        }).ToList();
-
-
-            int iLegIndex = 0;
-            int iLegCount = legs.Count();
-
-
-            decimal dDistanceFromStart = 0;
-
-            /* now the model has been populated we try and construct the route */
-            foreach (Leg leg in legs)
-            {
-                string sFromCode = leg.fromPort.code;
-                string sToCode = leg.toPort.code;
-
-                foreach (WayPoint wp in leg.WayPointList)
-                {
-                    bool bShowPortPopup = false;
-                    bool bDrawPolygon = true;
-                    if (wp.name == sFromCode)
-                    {
-                        wp.name = leg.fromPort.name;
-                        if (iLegIndex == 0)
-                        {
-                            bShowPortPopup = true;
-                        }
-                        else
-                        {
-                            bDrawPolygon = false;
-                        }
-                    }
-                    if (wp.name == sToCode)
-                    {
-                        wp.name = leg.toPort.name;
-                        bShowPortPopup = true;
-                    }
-
-                    if (bShowPortPopup)
-                    {
-
-                        dDistanceFromStart += wp.DistanceFromStart;
-
-                        popupDetail.Append(@"
-                            L.marker([").Append(wp.LatGeodetic.ToString()).Append(",").Append(wp.Lon.ToString()).Append(@"]).addTo(map)
-                            .bindPopup('<h2>").Append(wp.name).Append("</h2><br/>Lat:").Append(String.Format("{0:0.00}", wp.LatGeodetic)).Append(", Lon:").Append(String.Format("{0:0.00}", wp.Lon)).Append("<br/>Distance From Start:").Append(String.Format("{0:0.00}", dDistanceFromStart)).Append("<br/>Distance of Leg:").Append(String.Format("{0:0.00}", wp.DistanceFromStart)).Append(@"')
-                            .openPopup();
-                        ");
-
-                    }
-                    if (bDrawPolygon)
-                    {
-                        polylinePoint.Append("new L.LatLng(").Append(wp.LatGeodetic.ToString()).Append(",").Append(wp.Lon.ToString()).Append("),");
-                    }
-                }
-
-                iLegIndex++;
-            }
-            sHtmlSource.Append(popupDetail);
-
-            sHtmlSource.Append(polylinePoint);
-
-            sHtmlSource.Append(@"];
-         
-         var polylineOptions = {
-               color: 'green',
-               weight: 3,
-               opacity: 0.9
-             };
-
-         var polyline = new L.Polyline(polylinePoints, polylineOptions);
-
-         map.addLayer(polyline);                        
-
-         // zoom the map to the polyline
-         map.fitBounds(polyline.getBounds());
-
-		//add zoom control with your options
-		L.control.zoom({
-			 position:'topright'
-		}).addTo(map);
-      }
-    </script>
-    </head>
-    <body onLoad='javascript: init(); '>
-        <div id = 'map' style = 'height: ").Append(mapHeight.ToString()).Append(@"px' ></div>
-    </body>
-</html>
-     ");
-            return sHtmlSource.ToString();
-        }
-
-
         
-
-
         /// <summary>
         /// This method is called by the getImage() method to construct the options that can be used when presenting the map image.
         /// 
@@ -1399,15 +1251,15 @@ namespace tankers.distances
     }
     return optionQueryString.ToString();
 }
-
+    
         /// <summary>
         /// This method with public scope is called by consumer to obtain the map image.  It requires assistance from both  _composeMapOptionString() and _downloadDataFromURL()
         /// 
         /// date created        20171019
-        /// last modified       20171023
+        /// last modified       20171024
         /// author              AGL027
         /// </summary>
-        public string GetGeoJsonData()
+        public string GetGeoJsonData(string sWsParm)
         {
             StringBuilder sGeoJsonData = new StringBuilder("");
             StringBuilder sAbcMarkerPorts = new StringBuilder("");
@@ -1415,13 +1267,12 @@ namespace tankers.distances
             StringBuilder sAbcLegRoutingFeaturePre = new StringBuilder("");
             StringBuilder sAbcMarkerRPs = new StringBuilder("");
 
+            // System.Windows.Forms.MessageBox.Show(sWsParm);
+
             double dAdustment=0;
             double dPreviousLon = 0;
             bool firstWayPoint=true;
-
-            // todo -   need to keep track of all closed routing points..
-            //          document
-
+            
             var legs = (from e in _voyagexml.Descendants(_xmlns + "Legs").Elements(_xmlns + "Leg")
                         select new Leg()
                         {
@@ -1490,10 +1341,18 @@ var abc_routing_points={
             int iLegCount = legs.Count();
             decimal dDistanceFromStart = 0;
 
+
+            List<ActiveRoutingPoint> ActiveRPsList = new List<ActiveRoutingPoint>();
+            
             /* now the model has been populated we try and construct the route */
             foreach (Leg leg in legs)
             {
- 
+                List<ActiveRoutingPoint> RPsInLeg = new List<ActiveRoutingPoint>();
+
+                if (leg.fromPort.code != leg.toPort.code)
+                {
+                    RPsInLeg = GetRPList(iLegIndex, sWsParm);
+                }
                 string sFromCode = leg.fromPort.code;
                 string sToCode = leg.toPort.code;
                 
@@ -1507,7 +1366,7 @@ var abc_routing_points={
                         dPreviousLon = wp.Lon;
                         firstWayPoint = false;
                     }
-   
+
                     bool bShowPortPopup = false;
                     bool bDrawPolyline = true;
 
@@ -1520,10 +1379,12 @@ var abc_routing_points={
                         }
                         else
                         {
+                        
                             bDrawPolyline = false;
+                        
                         }
                     }
-                    if (wp.name == sToCode)
+                    if (wp.name == sToCode || wp.name == leg.toPort.name)
                     {
                         wp.name = leg.toPort.name;
                         bShowPortPopup = true;
@@ -1537,7 +1398,7 @@ var abc_routing_points={
 },
 ""id"": ").Append(iLegIndex.ToString()).Append(@"
 },
-");   
+");
                     }
 
                     /* adjust longitude */
@@ -1552,25 +1413,15 @@ var abc_routing_points={
                     dPreviousLon = wp.Lon;
                     wp.Lon += dAdustment;
 
-                    if (wp.routingPointCode!="")
-                    {
-                        sAbcMarkerRPs.Append(@"
+                    if (wp.routingPointCode != "")
+                    { 
+                        foreach (ActiveRoutingPoint rp in RPsInLeg.Where(x => x.ShortCode.Contains(wp.routingPointCode)))
                         {
-                           ""type"": ""Feature"",
-                              ""geometry"": {
-                                ""type"": ""Point"",
-                                ""coordinates"": [").Append(wp.Lon).Append(",").Append(wp.LatGeodetic).Append(@"
-                                ]
-                            },
-                              ""properties"": {
-                                ""ShortCode"": """).Append(wp.routingPointCode).Append(@""",
-                                ""Name"": """).Append(_getRPName(wp.routingPointCode.ToString())).Append(@""",
-                                ""LegIndex"": ").Append(iLegIndex.ToString()).Append(@",
-                                ""Open"": true
-                              }
-                            },
-                        ");
-                        
+                            rp.IsOpen = true;
+                            rp.IsAdvanced = false;
+                            rp.LatGeodetic = wp.LatGeodetic;
+                            rp.Lon = wp.Lon;
+                        }
                     }
                    
                     if (bDrawPolyline)
@@ -1603,13 +1454,42 @@ var abc_routing_points={
                     
                 }
                 sAbcLegRouting.Append(@sAbcLegRoutingFeaturePre).Append(@sAbcLegRoutingCoord).Append(@sAbcLegRoutingFeaturePost);
+
+                ActiveRPsList.AddRange(RPsInLeg);
+
                 iLegIndex++;
             }
+            
+
+            /* After collecting all the routing points we can now format for each leg */
+            foreach (ActiveRoutingPoint rp in ActiveRPsList)
+            {
+                
+                sAbcMarkerRPs.Append(@"
+                {
+                    ""type"": ""Feature"",
+                        ""geometry"": {
+                        ""type"": ""Point"",
+                        ""coordinates"": [").Append(rp.Lon.ToString()).Append(",").Append(rp.LatGeodetic.ToString()).Append(@"
+                        ]
+                    },
+                        ""properties"": {
+                        ""ShortCode"": """).Append(rp.ShortCode).Append(@""",
+                        ""Name"": """).Append(rp.Name).Append(@""",
+                        ""LegIndex"": ").Append(rp.LegIndex.ToString()).Append(@",
+                        ""Open"": ").Append(rp.IsOpen.ToString().ToLower()).Append(@",
+                        ""Advanced"": ").Append(rp.IsAdvanced.ToString().ToLower()).Append(@"
+                        }
+                    },
+                ");
+            }
+            
+
+            /* now close each JS struture */
             sAbcMarkerRPs.Append(@"
     ]
 };
 ");
-
 
             sAbcLegRouting.Append(@"
     ]
@@ -1622,13 +1502,74 @@ var abc_routing_points={
 ");
             sGeoJsonData.Append(@sAbcLegRouting).Append(@sAbcMarkerPorts).Append(sAbcMarkerRPs);
             return sGeoJsonData.ToString();
+
+
+
         }
 
+        /// <summary>
+        /// This method creates a list per Leg that is called.  It loads the AtoBviaC defaults first and then
+        /// Overrides those with whatever Tramos has.
+        /// 
+        /// date created        20171023
+        /// last modified       20171027
+        /// author              AGL027
+        /// </summary>
+        public List<ActiveRoutingPoint> GetRPList(int iLegIndex, string sWsParm)
+        {
+            List<ActiveRoutingPoint> rplisting = new List<ActiveRoutingPoint>();
 
+            /* Phase I - We get AtoBviaC defaults and initialize the list */
+            var rps = from rp in _routingpointxml_cached.Descendants(_xmlns + "RoutingPoint")
+                     select new ActiveRoutingPoint
+                     {
+                         Type = "Point",
+                         ShortCode = rp.Element(_xmlns + "ShortCode").Value,
+                         LatGeodetic = double.Parse(rp.Element(_xmlns + "LatGeodetic").Value),
+                         Lon = double.Parse(rp.Element(_xmlns + "Lon").Value),
+                         Name = rp.Element(_xmlns + "Name").Value,
+                         IsOpen = Convert.ToBoolean(rp.Element(_xmlns + "OpenByDefault").Value),
+                         IsAdvanced = true,
+                         LegIndex = iLegIndex
+                     };
+
+           rplisting.AddRange(rps);
+
+           /* Phase II - with the wsparm received from Tramos we load what is set there in terms of PCGROUP override and what we have already */
+            NameValueCollection parmData = HttpUtility.ParseQueryString(sWsParm);
+            var items = parmData.AllKeys.SelectMany(parmData.GetValues, (k, v) => new { key = k, value = v });
+            var sorteditems = items.OrderBy(kvp => kvp.value);
+
+            foreach (var item in sorteditems)
+            {
+                bool bIsOpen = true;
+                bool bIsAdvanced = false;
+                if (item.key == "close")
+                {
+                    bIsOpen = false;
+                    bIsAdvanced = true;
+                }
+                if (item.value.Length == 3 && (item.key=="close" || item.key == "open")) 
+                {
+                    foreach (ActiveRoutingPoint rp in rplisting.Where(x => x.ShortCode.Contains(item.value)))
+                    {
+                        rp.IsOpen = bIsOpen;
+                        rp.IsAdvanced = bIsAdvanced;
+                    }
+                }
+                else if (item.value.Length > 3 && (item.key == "close" || item.key == "open"))
+                {
+                    int iLegindex = Convert.ToInt16(item.value.Substring(4));
+                    foreach (ActiveRoutingPoint rp in rplisting.Where(x => x.ShortCode.Contains(item.value.Substring(0,3)) && x.LegIndex == iLegindex))
+                    {
+                        rp.IsOpen = bIsOpen;
+                        rp.IsAdvanced = bIsAdvanced;
+                    }
+                }
+            }
+            return rplisting;
+        }
         
-
-
-
     }
 
 

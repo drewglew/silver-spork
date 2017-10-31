@@ -32,5 +32,17 @@ namespace tankers.distances.models.datawindow
         public double Lon { get; set; }
     }
 
+    public class ActiveRoutingPoint
+    {
+        public string Type { get; set; }
+        public string ShortCode { get; set; }
+        public string Name { get; set; }
+        public double LatGeodetic { get; set; }
+        public double Lon { get; set; }
+        public int LegIndex { get; set; }
+        public bool IsOpen { get; set; }
+        public bool IsAdvanced { get; set; }
+
+    }
 }
 
