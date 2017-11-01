@@ -306,7 +306,6 @@ namespace tankers.distances
         /// last modified       20171016
         /// author              AGL027
         /// </remarks>
-        /// <param name="method">possibly could be Image; Voyage</param>
         /// <param name="ports">a delimited list of port codes from Tramos client</param>
         /// <param name="open_default"></param>
         /// <param name="close_default"></param>
@@ -315,10 +314,8 @@ namespace tankers.distances
         /// <param name="scaneca">always scan eca zones and provide data in XML</param>
         /// <param name="envnavreg">if method is 'voyage' use envnavreg parm name otherwise use showsecazones.  There is link between the map & voyage option </param>
         /// <param name="antipiracy">if method is 'voyage' use antipiracy parm name otherwise use showpiracyzones.  There is link between the map & voyage option </param>
-        public String TransformToUrl(String method, String ports, String open_default, String close_default, String open_leglevel, String close_leglevel, int scaneca, int envnavreg, int antipiracy)
+        public String TransformToUrl(String ports, String open_default, String close_default, String open_leglevel, String close_leglevel, int scaneca, int envnavreg, int antipiracy)
         {
-            String portArg = "";
-
             StringBuilder portParms = new StringBuilder("");
             StringBuilder openParms = new StringBuilder("");
             StringBuilder closeParms = new StringBuilder("");
@@ -354,21 +351,7 @@ namespace tankers.distances
                     {
                         firstArg = false;
                     }
-
-                    if (method.ToLower() == "image")
-                    {
-                        if (_portsxml_cached == null)
-                        {
-                            _portsxml_cached = _getPorts();
-                        }
-                        // obtain nice port name and escape problems chars i.e. <space> 
-                        portArg = Uri.EscapeDataString(_getPortName(port));
-                    }
-                    else
-                    {
-                        portArg = port;
-                    }
-                    portParms.Append("port=").Append(portArg);
+                    portParms.Append("port=").Append(port);
                 }
             }
 
@@ -413,29 +396,15 @@ namespace tankers.distances
             }
             if (envnavreg == 0)
             {
-                if (method == "voyage")
-                {
-                    additionalParms.Append("&envnavreg=false");
-                }
-                else if (method == "image")
-                {
-                    additionalParms.Append("&showsecazones=false&envnavreg=false");
-                }
+                additionalParms.Append("&envnavreg=false");
             }
             if (antipiracy == 0)
             {
-                if (method == "voyage")
-                {
-                    additionalParms.Append("&antipiracy=false");
-                }
-                else if (method == "image")
-                {
-                    additionalParms.Append("&showpiracyzones=false&antipiracy=false");
-                }
+                additionalParms.Append("&antipiracy=false");
             }
 
             /* new item since 20171016 */
-            additionalParms.Append("&waypointResolution=detailed-high");
+            additionalParms.Append("&illustrate=true");
             
             /* concatinate all the parameters needed and pass back to calling process */
             parturl.Append(portParms).Append(openDefaultParms).Append(closeDefaultParms).Append(openParms).Append(closeParms).Append(additionalParms);
@@ -555,7 +524,7 @@ namespace tankers.distances
             /* so we get all routings without any parms */
             StringBuilder urlRoutings = new StringBuilder();
 
-            urlRoutings.Append(_wsns.ToString()).Append("/Voyage?").Append(portParms).Append("&waypointResolution=detailed-high").Append(useEcaZone).Append("&api_key=" + _apikey);
+            urlRoutings.Append(_wsns.ToString()).Append("/Voyage?").Append(portParms).Append("&illustrate=true&waypointResolution=detailed-high").Append(useEcaZone).Append("&api_key=" + _apikey);
             abcResponse abcResp = new abcResponse();
 
             abcResp = _downloadStringFromURL(urlRoutings.ToString());
@@ -594,7 +563,7 @@ namespace tankers.distances
 
             StringBuilder url = new StringBuilder();
             //Now we locate the open routing points
-            url.Append(_wsns.ToString()).Append("/Voyage?").Append(portParms).Append("&waypointResolution=detailed-high").Append("&routingString=").Append(abcEngineState).Append(useEcaZone).Append("&api_key=" + _apikey);
+            url.Append(_wsns.ToString()).Append("/Voyage?").Append(portParms).Append("&illustrate=true&waypointResolution=detailed-high").Append("&routingString=").Append(abcEngineState).Append(useEcaZone).Append("&api_key=" + _apikey);
 
             abcResp = _downloadStringFromURL(url.ToString());
             if (!string.IsNullOrEmpty(abcResp.code))
@@ -688,7 +657,7 @@ namespace tankers.distances
             {
                 StringBuilder url = new StringBuilder();
 
-                url.Append(_wsns.ToString()).Append("/Voyage?").Append(wsParmString).Append("&waypointResolution=detailed-high").Append("&api_key=" + _apikey);
+                url.Append(_wsns.ToString()).Append("/Voyage?").Append(wsParmString).Append("&illustrate=true&waypointResolution=detailed-high").Append("&api_key=" + _apikey);
                 abcResponse abcResp = new abcResponse();
 
                 abcResp = _downloadStringFromURL(url.ToString());
@@ -713,7 +682,6 @@ namespace tankers.distances
 
                 /* construct data that will be loaded into the calling datawindow */
                 StringBuilder dwContent = new StringBuilder();
-
                 dwContent = _parseXMLContentToDWFormat(content);
 
                 return dwContent.ToString();
@@ -1251,28 +1219,38 @@ namespace tankers.distances
     }
     return optionQueryString.ToString();
 }
-    
+
+
         /// <summary>
         /// This method with public scope is called by consumer to obtain the map image.  It requires assistance from both  _composeMapOptionString() and _downloadDataFromURL()
         /// 
         /// date created        20171019
-        /// last modified       20171024
+        /// last modified       20171031
         /// author              AGL027
         /// </summary>
         public string GetGeoJsonData(string sWsParm)
         {
             StringBuilder sGeoJsonData = new StringBuilder("");
-            StringBuilder sAbcMarkerPorts = new StringBuilder("");
-            StringBuilder sAbcLegRouting = new StringBuilder("");
             StringBuilder sAbcLegRoutingFeaturePre = new StringBuilder("");
             StringBuilder sAbcMarkerRPs = new StringBuilder("");
 
-            // System.Windows.Forms.MessageBox.Show(sWsParm);
-
-            double dAdustment=0;
             double dPreviousLon = 0;
-            bool firstWayPoint=true;
-            
+
+            OffSetRouting[] offsets =
+            {
+                new OffSetRouting { OffSetAmount = -360, JSVariableName="abc_routing_neg360"  },
+                new OffSetRouting { OffSetAmount = 0, JSVariableName="abc_routing"  },
+                new OffSetRouting { OffSetAmount = 360, JSVariableName="abc_routing_pos360"  }
+            };
+
+            OffSetPortMarkers[] markerOffsets =
+            {
+                new OffSetPortMarkers { OffSetAmount = -360, JSVariableName="abc_marker_ports_neg360"  },
+                new OffSetPortMarkers { OffSetAmount = 0, JSVariableName="abc_marker_ports"  },
+                new OffSetPortMarkers { OffSetAmount = 360, JSVariableName="abc_marker_ports_pos360"  }
+            };
+
+            // System.Windows.Forms.MessageBox.Show(sWsParm);
             var legs = (from e in _voyagexml.Descendants(_xmlns + "Legs").Elements(_xmlns + "Leg")
                         select new Leg()
                         {
@@ -1283,8 +1261,8 @@ namespace tankers.distances
                                 name = (string)r.Element(_xmlns + "Name"),
                                 code = (string)r.Element(_xmlns + "Code"),
                                 LatGeodetic = double.Parse(r.Element(_xmlns + "LatGeodetic").Value, CultureInfo.InvariantCulture),
-                                Lon = double.Parse(r.Element(_xmlns + "Lon").Value,CultureInfo.InvariantCulture)
-                        }).FirstOrDefault(),
+                                Lon = double.Parse(r.Element(_xmlns + "Lon").Value, CultureInfo.InvariantCulture)
+                            }).FirstOrDefault(),
 
                             toPort = e.Elements(_xmlns + "ToPort")
                             .Select(r => new Port()
@@ -1306,23 +1284,37 @@ namespace tankers.distances
                                 LatGeodetic = double.Parse(r.Element(_xmlns + "LatGeodetic").Value, CultureInfo.InvariantCulture),
                                 Lon = double.Parse(r.Element(_xmlns + "Lon").Value, CultureInfo.InvariantCulture)
 
+                            }).ToList(),
+
+                            PolyLineList = e.Element(_xmlns + "IllustrativeRoute").Elements(_xmlns + "Polyline").Elements(_xmlns + "Point")
+                            .Select(r => new PolyLinePoint()
+                            {
+                                LatGeodetic = double.Parse(r.Element(_xmlns + "LatGeodetic").Value, CultureInfo.InvariantCulture),
+                                Lon = double.Parse(r.Element(_xmlns + "Lon").Value, CultureInfo.InvariantCulture)
+
                             }).ToList()
 
                         }).ToList();
-            
-            /* on every waypoint we add detail to this collection */
-            sAbcLegRouting.Append(@"
-var abc_routing = {
+
+            foreach (OffSetRouting o in offsets)
+            {
+                o.AbcRouting.Append(@"
+  var ").Append(o.JSVariableName).Append(@" = {
     ""type"": ""FeatureCollection"",
     ""features"": [
-            ");
+");
+            }
 
             /* on a port level we add the detail to this collection */
-            sAbcMarkerPorts.Append(@"
-var abc_marker_ports={
+            foreach (OffSetPortMarkers o in markerOffsets)
+            {
+                o.AbcMarkerPorts.Append(@"
+var ").Append(o.JSVariableName).Append(@" = {
   ""type"": ""FeatureCollection"",
   ""features"": [
             ");
+}
+
 
             sAbcMarkerRPs.Append(@"
 var abc_routing_points={
@@ -1341,6 +1333,7 @@ var abc_routing_points={
             int iLegCount = legs.Count();
             decimal dDistanceFromStart = 0;
 
+            double dAdjustment = 0;
 
             List<ActiveRoutingPoint> ActiveRPsList = new List<ActiveRoutingPoint>();
             
@@ -1348,6 +1341,7 @@ var abc_routing_points={
             foreach (Leg leg in legs)
             {
                 List<ActiveRoutingPoint> RPsInLeg = new List<ActiveRoutingPoint>();
+                bool bFirstPoint = true;
 
                 if (leg.fromPort.code != leg.toPort.code)
                 {
@@ -1357,19 +1351,35 @@ var abc_routing_points={
                 string sToCode = leg.toPort.code;
                 
                 StringBuilder sAbcLegRoutingFeaturePost = new StringBuilder();
-                StringBuilder sAbcLegRoutingCoord = new StringBuilder();
+               
+                /* use PolyLinePoint's */
+                foreach (PolyLinePoint p in leg.PolyLineList)
+                {
+                    if (bFirstPoint)
+                    {
+                        dPreviousLon = p.Lon;
+                        bFirstPoint = false;
+                    }
+                    if (p.Lon > (dPreviousLon + 180))
+                    {
+                        dAdjustment -= 360;
+                    }
+                    else if (p.Lon < (dPreviousLon - 180))
+                    {
+                        dAdjustment += 360;
+                    }
+                    dPreviousLon = p.Lon;
+                    p.Lon += dAdjustment;
+                    foreach (OffSetRouting o in offsets)
+                    {
+                        o.CoordContent.Append("[").Append((p.Lon + o.OffSetAmount).ToString()).Append(",").Append(p.LatGeodetic.ToString()).Append("],");
+                    }
+                }
 
+                /* Next loop through Way Points */
                 foreach (WayPoint wp in leg.WayPointList)
                 {
-                    if (firstWayPoint)
-                    {
-                        dPreviousLon = wp.Lon;
-                        firstWayPoint = false;
-                    }
-
                     bool bShowPortPopup = false;
-                    bool bDrawPolyline = true;
-
                     if (wp.name == sFromCode)
                     {
                         wp.name = leg.fromPort.name;
@@ -1377,18 +1387,11 @@ var abc_routing_points={
                         {
                             bShowPortPopup = true;
                         }
-                        else
-                        {
-                        
-                            bDrawPolyline = false;
-                        
-                        }
                     }
                     if (wp.name == sToCode || wp.name == leg.toPort.name)
                     {
                         wp.name = leg.toPort.name;
                         bShowPortPopup = true;
-
                         sAbcLegRoutingFeaturePost.Append(@"
 ]
     },
@@ -1401,70 +1404,57 @@ var abc_routing_points={
 ");
                     }
 
-                    /* adjust longitude */
-                    if (wp.Lon > (dPreviousLon + 180))
-                    {
-                        dAdustment -= 360;
-                    }
-                    else if (wp.Lon < (dPreviousLon - 180))
-                    {
-                        dAdustment += 360;
-                    }
-                    dPreviousLon = wp.Lon;
-                    wp.Lon += dAdustment;
-
                     if (wp.routingPointCode != "")
                     { 
                         foreach (ActiveRoutingPoint rp in RPsInLeg.Where(x => x.ShortCode.Contains(wp.routingPointCode)))
                         {
                             rp.IsOpen = true;
                             rp.IsAdvanced = false;
+                            /* adjust the coordinates so routing point is found on routing line */
                             rp.LatGeodetic = wp.LatGeodetic;
                             rp.Lon = wp.Lon;
                         }
                     }
-                   
-                    if (bDrawPolyline)
-                    { 
-                        sAbcLegRoutingCoord.Append("[").Append( wp.Lon.ToString()).Append(",").Append(wp.LatGeodetic.ToString()).Append("],");
-                    }
-
                     if (bShowPortPopup)
                     {
                         dDistanceFromStart += wp.DistanceFromStart;
-                        sAbcMarkerPorts.Append(@"
+                        foreach (OffSetPortMarkers o in markerOffsets)
                         {
-                           ""type"": ""Feature"",
-                              ""geometry"": {
-                                ""type"": ""Point"",
-                                ""coordinates"": [").Append(wp.Lon).Append(",").Append(wp.LatGeodetic).Append(@"
-                                ]
-                            },
-                              ""properties"": {
-                                ""PortName"": """).Append(wp.name).Append(@""",
-                                ""Lat"": ").Append(String.Format("{0:0.00}", wp.LatGeodetic)).Append(@",
-                                ""Lon"": ").Append(String.Format("{0:0.00}", wp.Lon)).Append(@",
-                                ""DistanceFromStart"": ").Append(String.Format("{0:0.00}", dDistanceFromStart)).Append(@",
-                                ""LegDistance"": ").Append(String.Format("{0:0.00}", wp.DistanceFromStart)).Append(@"
-                              }
-                            },
-                        ");
+
+                            o.AbcMarkerPorts.Append(@"
+                            {
+                               ""type"": ""Feature"",
+                                  ""geometry"": {
+                                    ""type"": ""Point"",
+                                    ""coordinates"": [").Append(wp.Lon + o.OffSetAmount).Append(",").Append(wp.LatGeodetic).Append(@"
+                                    ]
+                                },
+                                  ""properties"": {
+                                    ""PortName"": """).Append(wp.name).Append(@""",
+                                    ""Lat"": ").Append(String.Format("{0:0.00}", wp.LatGeodetic)).Append(@",
+                                    ""Lon"": ").Append(String.Format("{0:0.00}", wp.Lon)).Append(@",
+                                    ""DistanceFromStart"": ").Append(String.Format("{0:0.00}", dDistanceFromStart)).Append(@",
+                                    ""LegDistance"": ").Append(String.Format("{0:0.00}", wp.DistanceFromStart)).Append(@"
+                                  }
+                                },
+                            ");
+                        }
                         
                     }
-                    
                 }
-                sAbcLegRouting.Append(@sAbcLegRoutingFeaturePre).Append(@sAbcLegRoutingCoord).Append(@sAbcLegRoutingFeaturePost);
-
+                foreach (OffSetRouting o in offsets)
+                {
+                    o.AbcRouting.Append(sAbcLegRoutingFeaturePre).Append(o.CoordContent).Append(sAbcLegRoutingFeaturePost);
+                    o.CoordContent = new StringBuilder("");
+                }
+                
                 ActiveRPsList.AddRange(RPsInLeg);
-
                 iLegIndex++;
             }
             
-
             /* After collecting all the routing points we can now format for each leg */
             foreach (ActiveRoutingPoint rp in ActiveRPsList)
             {
-                
                 sAbcMarkerRPs.Append(@"
                 {
                     ""type"": ""Feature"",
@@ -1483,28 +1473,41 @@ var abc_routing_points={
                     },
                 ");
             }
-            
 
-            /* now close each JS struture */
+            /* Close each JS struture */
             sAbcMarkerRPs.Append(@"
     ]
 };
 ");
 
-            sAbcLegRouting.Append(@"
+            foreach (OffSetRouting o in offsets)
+            {
+                o.AbcRouting.Append(@"
     ]
 };
 ");
+            }
 
-            sAbcMarkerPorts.Append(@"
+            foreach (OffSetPortMarkers o in markerOffsets)
+            {
+                o.AbcMarkerPorts.Append(@"
 	]	
 };
 ");
-            sGeoJsonData.Append(@sAbcLegRouting).Append(@sAbcMarkerPorts).Append(sAbcMarkerRPs);
+            }
+
+            foreach (OffSetRouting o in offsets)
+            {
+                sGeoJsonData.Append(@o.AbcRouting);
+            }
+            foreach (OffSetPortMarkers o in markerOffsets)
+            {
+                sGeoJsonData.Append(@o.AbcMarkerPorts);
+            }
+
+            sGeoJsonData.Append(sAbcMarkerRPs);
+
             return sGeoJsonData.ToString();
-
-
-
         }
 
         /// <summary>
@@ -1571,8 +1574,5 @@ var abc_routing_points={
         }
         
     }
-
-
-
-
+    
 }
